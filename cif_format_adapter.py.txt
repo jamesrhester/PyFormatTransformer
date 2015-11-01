@@ -1,0 +1,85 @@
+Introduction
+============
+
+This is a demonstration format adapter as described by Hester (2016).
+They set and return data in a uniform (domain,name) presentation.  All
+format adapter sets must choose how values and units are to be
+presented. Here we choose Numpy representation, and standard units of
+'metres' for length.  This adapter is not intended to be
+comprehensive, but instead to show how a full adapter might be
+written.
+
+Three routines are required:
+1. get_by_location(name,type,domain=None)
+Return a numpy array or string corresponding to
+all values associated with name. Type
+is restricted to "real", "text" or "int".
+2. set_by_location(domain,name,values,type)
+Set all values for (domain,name)
+3. set_by_domain_value(domain,domain_value,name,value,type)
+Set the value of name corresponding to the value of domain equalling (domain,name)
+
+We use the pycifrw library for access, and the pycbf library for image handling. ::
+  
+    import pycbf
+    
+Configuration data
+==================
+
+These tables show how canonical names match up to CIF names. This is either
+a direct match, or individual values are embedded in a string value.  None of
+the latter are covered here. An optional function is included in case the
+value has to be converted (units or list of restricted values)::
+
+    canonical_name_locations_mx = {
+    "source current": ["diffrn_source.current",None],
+    "incident wavelength":["diffrn_radiation_wavelength.wavelength",None],
+    "probe":["diffrn_radiation.probe",convert_probe],
+    "start time": ["diffrn_scan.date_start",None],
+    "axis vector":["axis.vector",None],
+    "axis id":["axis.id",None],
+    "array data":["array_data.data"]  #one item per collection
+    }
+
+Converting values
+=================
+
+We need to match the types 'Real', 'Int' and 'Text'.  As CIF is text-based,
+this means we simply apply the relevant conversions.  For speed, we assume
+that incoming is iterable, rather than mapping [[convert_type]] itself to
+each element. ::
+
+    def convert_type(incoming,target_type):
+        """Convert all elements of incoming to [[target_type]]"""
+        if not isinstance(incoming,(list,tuple)):
+            incoming = [incoming]
+        if target_type == "Real":
+            return [float(a) for a in incoming]
+        elif target_type == "Int":
+            return [int(a) for a in incoming]
+        elif target_type == "Text":
+            return incoming
+
+Obtaining values
+================
+
+We very simply return the specified dataname.::
+
+    def get_by_location(datahandle,name,value_type,domain=None):
+        """Return values as [[value_type]] for [[name]]"""
+        cif_location,transform = canonical_name_locations_mx.get(name,(None,None))
+        if cif_location is None:
+            return None
+        values = transform(datahandle[cif_location])
+        return convert_type(values)
+
+Setting values
+==============
+
+CIF requires everything to be a string.  This is handled automatically
+by the PyCIFRW system, and the supplied value is assumed to be correct. ::
+
+    def set_by_location(datahandle,name,value,value_type,domain=None):
+        cif_location = canonical_name_locations_mx.get(name,(None,None))[0]
+        if cif_location is not None:
+            datahandle[cif_location] = value

@@ -1,0 +1,371 @@
+#\#CIF_2.0
+#DDLm dictionary edited in DDLm-authortools
+data_demo_dic
+
+_dictionary.title                       demo_dic
+_dictionary.version                     0.0.1
+_dictionary.ddl_conformance             3.11.04
+_dictionary.class                       Instance
+_dictionary.namespace                   ?
+_description.text 
+                                        'This dictionary was developed as a demonstration dictionary showing how datanames in an olog presentation can be related to one another.'
+_dictionary.date                        2015-11-02
+loop_
+  _dictionary_audit.version
+  _dictionary_audit.date
+  _dictionary_audit.revision
+         0.0.1     2015-11-02          'First version(James Hester)()()()()()' 
+
+save_DEMO_DIC_HEAD
+
+_definition.id                          DEMO_DIC_HEAD
+_definition.scope                       Category
+_definition.class                       Head
+_description.text 
+                                        'This category is parent of all other categories in the demo_dic dictionary'
+_name.object_id                         DEMO_DIC_HEAD
+
+save_
+
+
+save_data_axis
+
+_name.object_id                         'data_axis'
+_name.category_id                       DEMO_DIC_HEAD
+_definition.id                          'data_axis'
+_definition.scope                       Category
+_definition.class                       Loop
+_description.text 
+                                        'Items in the data_axis category describe the axes used relevant to the entire dataset as a single data array, that is, they include both scan axes and detector array axes, but not axes that were fixed during data collection. '
+_category.key_id                        '_data_axis.id'
+loop_
+  _category_key.name
+         '_data_axis.id' 
+loop_
+  _method.purpose
+  _method.expression
+         Evaluation          
+;
+#Collect all axes from the other categories
+scan_axes = []
+loop diffrn_scan as d {
+    scan_axes+=d.id
+}
+
+; 
+
+save_
+
+
+save__data_axis.id
+
+_definition.id                          '_data_axis.id'
+_name.object_id                         id
+_name.category_id                       'data_axis'
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save_diffrn_scan_simple
+
+_name.object_id                         diffrn_scan_simple
+_name.category_id                       DEMO_DIC_HEAD
+_definition.id                          diffrn_scan_simple
+_definition.scope                       Category
+_definition.class                       Loop
+_description.text 
+                                        'This category provides information about scans consisting of identically-structured frames from single-axis movements.'
+
+save_
+
+
+save__diffrn_scan_simple.frames
+
+_definition.id                          '_diffrn_scan_simple.frames'
+_name.object_id                         frames
+_name.category_id                       diffrn_scan_simple
+_definition.class                       Datum
+_description.text                       'The number of frames making up the simple scan'
+_type.purpose                           Number
+_type.source                            Recorded
+_type.container                         Single
+_type.contents                          Integer
+
+save_
+
+
+save__diffrn_scan_simple.scan_id
+
+_definition.id                          '_diffrn_scan_simple.scan_id'
+_name.object_id                         scan_id
+_name.category_id                       diffrn_scan_simple
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save_diffrn_scan_simple_frames
+
+_name.object_id                         diffrn_scan_simple_frames
+_name.category_id                       DEMO_DIC_HEAD
+_definition.id                          diffrn_scan_simple_frames
+_definition.scope                       Category
+_definition.class                       Loop
+_description.text                       
+;This category provides information about diffraction frames for scans that consist of identically-constructed
+frames with a single scan axis. 
+;
+loop_
+  _category_key.name
+         '_diffrn_scan_simple.id' 
+loop_
+  _method.purpose
+  _method.expression
+         Evaluation          
+;
+# Select only those elements of diffrn_scan that
+# have full-frame data. 
+loop full_frame as ff {
+diffrn_scan_simple(.frame_id = ff.id
+                   .scan_id = diffrn_scan_frame[ff.id].scan_id)
+}
+
+; 
+
+save_
+
+
+save_diffrn_scan_simple_frames.frame_id
+
+_definition.id                          '_diffrn_scan_simple_frames.frame_id'
+_name.object_id                         frame_id
+_name.category_id                       diffrn_scan_simple_frames
+_definition.class                       Datum
+_description.text                       'Frame IDs corresponding to the the identified scan.'
+
+save_
+
+
+save_diffrn_scan_simple_frames.scan_id
+
+_definition.id                          '_diffrn_scan_simple_frames.scan_id'
+_name.object_id                         scan_id
+_name.category_id                       diffrn_scan_simple_frames
+_definition.class                       Datum
+_description.text 
+                                        'An identifier for a simple scan. This item points to _diffrn_scan.id'
+_type.purpose                           Key
+_type.source                            Assigned
+_type.container                         Single
+_type.contents                          Text
+
+save_
+
+
+save_full_frame
+
+_name.object_id                         full_frame
+_name.category_id                       DEMO_DIC_HEAD
+_definition.id                          full_frame
+_definition.scope                       Category
+_definition.class                       Loop
+_description.text 
+                                        'Items in the full frame category describe data arrays that require no assembly from individual elements.'
+_category.key_id                        '_full_frame.id'
+loop_
+  _method.purpose
+  _method.expression
+         Evaluation          
+;
+# Although it would be useful to encode a general method for composing individual elements into a single array,
+# that is too complex to undertake in this demonstration dictionary. Instead we only operate in cases where
+# there is one detector with one frame.
+det_count = 0
+can_do = 1
+loop diffrn_detector as dd {
+    det_count = det_count + 1
+}
+if (det_count > 1) can_do = 0
+else {
+    el_count = 0 
+    loop diffrn_detector_element as dde {
+      el_count = el_count + 1
+     }
+    if (el_count > 1) can_do = 0
+}
+# we loop over element/detector frames identifying full frames
+if (can_do == 1) {
+   loop diffrn_data_frame as ddf {
+        full_frame (.id = ddf.id,
+        faid +=     .array_id = ddf.array_id,
+        fbid +=     .binary_id = ddf.binary_id
+                   )
+        }
+    }
+
+; 
+
+save_
+
+
+save__full_frame.array_id
+
+_definition.id                          '_full_frame.array_id'
+_name.object_id                         array_id
+_name.category_id                       full_frame
+_definition.class                       Datum
+_description.text                       'A pointer to the array structure describing this full frame'
+_type.purpose                           Link
+_type.source                            Related
+_type.container                         Single
+_type.contents                          Text
+
+save_
+
+
+save__full_frame.binary_id
+
+_definition.id                          '_full_frame.binary_id'
+_name.object_id                         binary_id
+_name.category_id                       full_frame
+_definition.class                       Datum
+_description.text 
+                                        'A pointer to the binary block containing the data for this full frame'
+_type.purpose                           Link
+_type.source                            Related
+_type.container                         Single
+_type.contents                          Text
+
+save_
+
+
+save__full_frame.id
+
+_definition.id                          '_full_frame.id'
+_name.object_id                         id
+_name.category_id                       full_frame
+_definition.class                       Datum
+_description.text 
+                                        'This item defines identifies a full frame of data and is a pointer to _diffrn_data_frame.id'
+_type.purpose                           Key
+_type.source                            Assigned
+_type.container                         Single
+_type.contents                          Text
+
+save_
+
+
+save_scan_array_axis
+
+_name.object_id                         scan_array_axis
+_name.category_id                       DEMO_DIC_HEAD
+_definition.id                          scan_array_axis
+_definition.scope                       Category
+_definition.class                       Loop
+_description.text                       'No definition provided'
+
+save_
+
+
+save_scan_array_data
+
+_name.object_id                         scan_array_data
+_name.category_id                       DEMO_DIC_HEAD
+_definition.id                          scan_array_data
+_definition.scope                       Category
+_definition.class                       Loop
+_description.text                       
+;Items in the scan array category describe data arrays obtained by stacking all exposures in a single scan.
+Not all items have been defined but in general a series of items analogous to the array data items should
+be defined.
+
+;
+loop_
+  _category_key.name
+         '_scan_array.id' 
+loop_
+  _method.purpose
+  _method.expression
+         Evaluation          
+;
+# Putting all data into a single block is
+# only possible if all measurements for
+# that scan have the same array ID (i.e.
+# a uniform structure) and consist of a
+# single detector element. We thus require
+# a full frame to be present for this scan
+# ID
+loop diffrn_scan as ds {
+    current_id = ds.id
+    array_struc = full_frame[ds.frame_id]
+
+; 
+
+save_
+
+
+save__scan_array_data.array_data
+
+_definition.id                          '_scan_array_data.array_data'
+_name.object_id                         array_data
+_name.category_id                       scan_array_data
+_definition.class                       Datum
+_description.text 
+                                        'A three-dimensional dataset obtained by concatenating all frames corresponding to a single scan ID in order with each frame assumed to have identical structure.  The data_axis items describe the appropriate axes for this dataset.'
+_type.purpose                           Number
+_type.source                            Assigned
+_type.container                         Array
+_type.contents                          Real
+loop_
+  _method.purpose
+  _method.expression
+         Evaluation          
+;
+# Construct a fully-stacked frame
+  with sad as scan_array_data {
+    total_frames = diffrn_scan_simple[sad.scan_id].frames
+    # find first frame
+    loop ffs as diffrn_scan_simple {
+        if (ffs.scan_id == sad.scan_id ) {
+            if (diffrn_scan_frame[ffs.frame_id].frame_number == 1) {
+                array_ptr = full_frame[ffs.frame_id].binary_id
+                final_result = array_data[array_ptr]
+            }
+        }
+    }
+    # now build up frames in order (this is a very slow way to do it)
+    do frame_no = 2,total_frames {
+      loop ffs as diffrn_scan_simple {
+        if (ffs.scan_id == sad.scan_id ) {
+            if (diffrn_scan_frame[ffs.frame_id].frame_number == frame_no) {
+                array_ptr = full_frame[ffs.frame_id].binary_id
+                final_result ++= array_data[array_ptr]
+            }
+        }
+      }
+    }
+  }
+  scan_array_data.array_data = final_result
+
+; 
+
+save_
+
+
+save__scan_array_data.scan_id
+
+_definition.id                          '_scan_array_data.scan_id'
+_name.object_id                         scan_id
+_name.category_id                       scan_array_data
+_definition.class                       Datum
+_description.text 
+                                        'This is a pointer to the scan ID. The data correspond to all individual measurements in this scan.'
+_type.purpose                           Key
+_type.source                            Assigned
+_type.container                         Single
+_type.contents                          Text
+
+save_

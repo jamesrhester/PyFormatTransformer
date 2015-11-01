@@ -1,0 +1,112 @@
+Introduction
+============
+
+This file demonstrates an ontology-driven transformation between file
+formats as discussed in Hester (2016).  In order to operate it
+needs (i) the nx and CIF format adapters written in Python and
+provided with this file; (ii) the dREL dictionary also provided.
+Transformation is driven by a list of canonical names (dataname
+bundle) provided in an external file and an input file conforming to
+either the CIF or NeXus standards.  For each canonical name, the
+system attempts to read that name from the input file using the
+appropriate adapter. If not found, the system looks up that name in
+the dREL dictionary and transforms any transformation method found
+into python using the API appropriate to the input file.  Following
+this the method is executed and, if successful, the resulting value is
+output to the output format adapter. ::
+
+    import nx_format_adapter,cif_format_adapter
+    from CifFile import CifDic
+
+Data tables
+===========
+
+These tables configure the operation of the transformation. ::
+
+    tranform_table = {"nexus":nx_format_adapter,
+                      "cif":cif_format_adapter,
+                      "plain":debug_adapter}
+
+Overall control
+===============
+
+This routine is responsible for overall control of the transformation. ::
+
+    def manage_transform(name_file,filetype,infile,outtype,outfile,unit_name=None,
+        drel_dict = './mx_def_transforms.dic'):
+        """Manage a file type transformation"""
+        singlenames,multinames = get_names(name_file)
+        all_names = singlenames + multinames
+        def_dic = CifDic(drel_dict,do_dREL=False)
+        in_module = transform_table[filetype]
+        out_module = transform_table[outtype]
+        in_handle = in_module.open_file(infile)
+        in_unit = in_module.open_data_unit(in_handle,entryname=unit_name)
+        out_unit = out_module.create_data_unit()
+        for name,type in all_names:
+            result = transform_table[filetype].get_by_location(in_unit,name,type)
+            if result is None:
+                result = execute_drel(def_dic,in_unit,name)
+            if result is None:
+                pass    # can't be done
+            #now output this value
+            out_module.set_by_location(out_unit,name,result,type)
+        #finish off
+        out_module.close_data_unit(out_unit)
+        out_module.output_file(outfile,[out_unit])
+        
+The dataname bundle
+-------------------
+
+The dataname bundle file is a simple file with format 'canonical name,type' on each line. If
+that name takes multiple values, it is prefixed by an asterisk (*).::
+
+    def get_names(name_file):
+        """Get datanames from the file"""
+        names = open(name_file).readlines()
+        names = [n.split(",") for n in names]
+        multinames = [n[0][1:],n[1] for n in names if n[0][0]=="*"]
+        singlenames = [n for n in names if n[0][0]!="*"]
+        return singlenames,multinames
+        
+Handling dREL
+=============
+
+We use the pre-existing dREL parser found in later versions of PyCIFRW.  We are
+passed a CifDic object, which contains definition blocks for each canonical name.
+Each definition block may contain a _method.expression text block in the dREL
+language, which we convert to an API-dependent form for execution. ::
+
+    def execute_drel(dictionary, canonical_name, type):
+        """Execute a drel method for deriving the value of canonical name"""
+        if not has_key(dictionary,canonical_name):
+            return None
+        if not has_key(dictionary[canonical_name],'_method.expression'):
+            return None
+        transform_info = dictionary[canonical_name]['_method.expression']
+        
+
+Command-line interface
+======================
+
+Three arguments are expected: the dataname bundle, the input file type (nexus or cif),
+and the input file name. ::
+
+    if __name__=="__main__":
+        import sys
+        if len(sys.argv)<5:
+            print "Usage: drive_transform <dataname bundle> <nexus/cif> <filename> <nexus/cif> <filename> (data unit name)"
+            exit
+        name_bundle = sys.argv[0]
+        filetype = sys.argv[1]
+        infile = sys.argv[2]
+        outtype = sys.argv[3]
+        outfile = sys.argv[4]
+        if len(sys.argv)<6:
+            data_unit_name = sys.argv[5]
+        else:
+            data_unit_name = None
+        execute_transform(name_bundle,filetype,infile,outtype,outfile,dataname=data_unit_name)
+
+
+ 
