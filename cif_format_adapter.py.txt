@@ -1,9 +1,9 @@
 Introduction
 ============
 
-This is a demonstration format adapter as described by Hester (2016).
-They set and return data in a uniform (domain,name) presentation.  All
-format adapter sets must choose how values and units are to be
+This is a demonstration format adapter for CIF as described by Hester (2016).
+Format adapters set and return data in a uniform (domain,name) presentation.  All
+format adapter collections must agree on how values and units are to be
 presented. Here we choose Numpy representation, and standard units of
 'metres' for length.  This adapter is not intended to be
 comprehensive, but instead to show how a full adapter might be
@@ -19,9 +19,14 @@ Set all values for (domain,name)
 3. set_by_domain_value(domain,domain_value,name,value,type)
 Set the value of name corresponding to the value of domain equalling (domain,name)
 
-We use the pycifrw library for access, and the pycbf library for image handling. ::
+We use the pycifrw library for access, and the pycbf library for image handling. 
+Because we need to use a completely different, fully-fledged CIF library, we
+have to carry along our file location and blockname in our data object, which
+we simply do using the magic of Python dynamic assignment. ::
   
     import pycbf
+    import CifFile
+    convert_probe = 'dummy'  #forward definition
     
 Configuration data
 ==================
@@ -29,16 +34,15 @@ Configuration data
 These tables show how canonical names match up to CIF names. This is either
 a direct match, or individual values are embedded in a string value.  None of
 the latter are covered here. An optional function is included in case the
-value has to be converted (units or list of restricted values)::
+value has to be converted (units, list of restricted values, array creation)::
 
     canonical_name_locations_mx = {
-    "source current": ["diffrn_source.current",None],
-    "incident wavelength":["diffrn_radiation_wavelength.wavelength",None],
-    "probe":["diffrn_radiation.probe",convert_probe],
-    "start time": ["diffrn_scan.date_start",None],
-    "axis vector":["axis.vector",None],
-    "axis id":["axis.id",None],
-    "array data":["array_data.data"]  #one item per collection
+    "source current": ["_diffrn_source.current",None],
+    "incident wavelength":["_diffrn_radiation_wavelength.wavelength",None],
+    "probe":["_diffrn_radiation.probe",convert_probe],
+    "start time": ["_diffrn_scan.date_start",None],
+    "axis vector":["_axis.vector",None],
+    "axis id":["_axis.id",None]
     }
 
 Converting values
@@ -60,21 +64,49 @@ each element. ::
         elif target_type == "Text":
             return incoming
 
-Obtaining values
-================
+Converting simple lists
+-----------------------
 
-We very simply return the specified dataname.::
+Some values are chosen from short lists of alternatives.  The following routine
+lists the conversions. ::
+
+    def convert_probe(incoming):
+        """Convert the value of incoming to the appropriate one for
+        radiation type"""
+        # not yet done.
+        return incoming
+
+The API functions
+=================
+
+Obtaining values
+----------------
+
+We very simply return the specified dataname, unless an image is requested, in 
+which case we have to process the CBF/imgCIF image data into a standard,
+format agnostic numpy array.::
 
     def get_by_location(datahandle,name,value_type,domain=None):
         """Return values as [[value_type]] for [[name]]"""
-        cif_location,transform = canonical_name_locations_mx.get(name,(None,None))
-        if cif_location is None:
-            return None
-        values = transform(datahandle[cif_location])
-        return convert_type(values)
+        if name == "2D array data":  #special name
+            return create_images(datahandle)
+        else:
+            cif_location,transform = canonical_name_locations_mx.get(name,(None,None))
+            if cif_location is None:
+                return None
+            try:
+                values = datahandle[cif_location]
+            except:
+                print "Couldn't find %s" % cif_location
+                return None    #couldn't be done
+            if transform is not None:
+                values = transform(values)
+            if isinstance(values,(basestring,int,float,complex)):
+                values = [values]
+            return convert_type(values,value_type)
 
 Setting values
-==============
+--------------
 
 CIF requires everything to be a string.  This is handled automatically
 by the PyCIFRW system, and the supplied value is assumed to be correct. ::
@@ -83,3 +115,119 @@ by the PyCIFRW system, and the supplied value is assumed to be correct. ::
         cif_location = canonical_name_locations_mx.get(name,(None,None))[0]
         if cif_location is not None:
             datahandle[cif_location] = value
+
+
+Housekeeping
+------------
+
+When opening and closing files and data units, we record the filename and
+blockname so that we can reopen the file with pycbf if asked for an image. ::
+
+    def open_file(filename):
+         """Open the CIF file [[filename]], returning a handle"""
+         ciffile = CifFile.CifFile(filename)
+         return ciffile
+
+    def open_data_unit(cifhandle,entryname=None):
+        """Open a particular datablock in [[cifhandle]]. If
+        an entryname is not provided, a quasi-random one is
+        returned"""
+        if entryname is not None and cifhandle.has_key(entryname):
+            cifblock = cifhandle[entryname]
+            cifblock.blockname = entryname
+        elif entryname is None:
+            cifblock = cifhandle.first_block()
+            cifblock.blockname = cifhandle.keys()[0]
+        else:
+            raise KeyError, 'No such block %s in CIF file' % entryname
+        cifblock.filename = cifhandle.my_uri
+        return cifblock
+
+    def create_data_unit(entryname = None):
+        """Start a new data unit"""
+        return CifBlock()
+
+    def close_data_unit(datafile, datablock, memos = {}):
+        """Finish off [[datablock]] in file [[datafile]]"""
+        # nothing to do in our case
+        return datablock
+
+    def output_file(filename, datablocks):
+        """Output a file containing the list of datablocks"""
+        cf = CifFile()
+        # for each generate simple block name
+        for block in datablocks:
+            newblockname = "Block_%d" % len(cf)+1
+            cf[newblockname] = block
+        f = open(filename,"w")
+        f.write(str(cf))
+        f.close()
+
+Creating images
+===============
+
+The image data stored in imgCIF is a string (as CIF has not yet
+defined images in terms of CIF2 array types) which require further
+processing to create a multidimensional Numpy array.  The present
+returns a proper array for each image in the file.  Note that this
+routine is for demonstration purposes and does not attempt to
+cover all possible array presentations possible in imgCIF: the
+point is that such processing is handled only in this format
+adapter routine and nowhere else. ::
+
+    def create_images(datablock):
+        """Return a set of numpy image arrays for this file"""
+        import numpy
+        # for each image, get the array
+        blockname = datablock.blockname
+        filename = datablock.filename
+        cbf_file = pycbf.cbf_handle_struct()
+        cbf_file.read_file(filename,pycbf.MSG_DIGEST)
+        cbf_file.rewind_datablock()
+        cbf_file.find_datablock(blockname)
+        cbf_file.find_category('array_data')
+        cbf_file.find_column('data')
+        cbf_file.rewind_row()  #start at first row
+        no_of_rows = cbf_file.count_rows()
+        print 'Found %d rows in %s[%s]' % (no_of_rows,filename,blockname)
+        final_images = []
+        for image_no in range(no_of_rows):
+            parms = cbf_file.get_integerarrayparameters_wdims_fs()
+            dimfast = parms[9]
+            dimslow = parms[11]
+            dimmid = parms[10]
+            print 'Image %d: %d x %d' % (image_no,dimfast,dimmid)
+            string_image = cbf_file.get_integerarray_as_string()
+            numpy_image = numpy.fromstring(string_image,numpy.uint32)
+            ff = numpy_image.reshape(dimfast,dimmid)
+            final_images.append(ff)
+            cbf_file.next_row()
+        return final_images
+
+Example processing
+==================
+
+A simple run-through to make sure it is working. ::
+
+    def process(filename,blockname):
+        filehandle = open_file(filename)
+        block = open_data_unit(filehandle,blockname)
+        output_values = [('incident wavelength','Real'),
+                         ('start time','Text')]
+        for o,t in output_values:
+            print get_by_location(block,o,t)
+        # check images work
+        pp = create_images(block)
+        print 'Found %d images' % len(pp)
+        print 'Shapes:'
+        for im in pp:
+           print `im.shape`
+
+    if __name__ == "__main__":
+        import sys
+        if len(sys.argv) < 3:
+            print "Usage: cif_format_adapter.py testfile testblock"
+            exit
+        filename = sys.argv[1]
+        blockname = sys.argv[2]
+        process(filename,blockname)

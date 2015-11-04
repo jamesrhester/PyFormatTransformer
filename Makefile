@@ -1,4 +1,4 @@
-programs: nx_format_adapter.py
+programs: nx_format_adapter.py cif_format_adapter.py drive_transformation.py create_test_file.py
 
 #
 %.py: %.ui
@@ -7,3 +7,5 @@ programs: nx_format_adapter.py
 %.py: %.py.rst
 	./pylit.py -t $< 
 #
+%.py: %.py.txt
+	./pylit.py -t $<

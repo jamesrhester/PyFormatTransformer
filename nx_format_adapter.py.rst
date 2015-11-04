@@ -28,16 +28,18 @@ Configuration data
 
 The following information details the link between canonical name and
 how the values are distributed in the HDF5 hierarchy. In general we
-can identify three ways of encoding names: (i) as single HDF5 paths,
-ending with a NeXus- defined name/attribute from a NeXus class (ii)
-those that are encoded structurally; (iii) those that are encoded
-within the values of other names.  For the values that can be easily
-obtained by specifying a path, we provide a lookup table;
+can identify four ways of encoding values corresponding to a single
+name: (i) as unique HDF5 paths, ending with a NeXus- defined
+property/attribute from a NeXus class (ii) those that are encoded
+structurally (e.g. in the order or as parents); (iii) multiple values
+of a single NeXus property arising from multiple classes; (iv) those
+that are encoded within the value of a name.  For the values that can
+be easily obtained by specifying a path, we provide a lookup table;
 structurally-encoded values can often be found by using special,
 pre-defined names.  For the final type, we provide an additional
-function that should be applied to values found using the table.
-Note that such functions should not perform mathematical calculations
-as this is supposed to happen in the ontology.
+function that should be applied to values found using the table.  Note
+that such functions should not perform mathematical calculations as
+this is supposed to happen in the ontology.
 
 Lookup for canonical names
 --------------------------
@@ -57,10 +59,6 @@ at sign should be placed at the end of the name and then the attribute.
 An asterisk (*) means that all fields in the group should be considered
 (as for NXtransformations groups).
 
-Our framework includes the notion of "constant" and "multiple-valued"
-datanames.  For maximum flexibility, we encode the restriction that
-the 
-
 Some canonical names represent multiple dependencies.  These are
 indicated by repeating the items above in a list.  Therefore, the total
 structure of an entry in the following table is:
@@ -76,7 +74,7 @@ structure of an entry in the following table is:
     "start time": [(("NXentry",),"start_time","to be done",None)],
     "axis vector":[(("NXtransformations",),"*@vector","to be done",None)],
     "axis id":[(("NXtransformations",),"*@nxname","to be done",None)],
-    "array axis id":[(("NXdetector","NXdata"),"data@axes","to be done",get_axes)],
+    "data axis id":[(("NXdetector","NXdata"),"data@axes","to be done",get_axes)],
     "data":[(("NXdetector","NXdata"),"data","to be done",None)]
     }
 
@@ -242,12 +240,44 @@ NeXus hierarchy here. ::
       nxclass,property = name.split(".")
 
 
+Housekeeping
+------------
 
-NeXus structure
----------------
+We provide routines for opening and closing a file and a data unit. ::
 
-This is a minimal list for demonstration purposes.  Each key gives its immediate
-parent.  We do not consider the option of using multiple parents here.
+    def open_file(filename):
+        """Open the NeXus file [[filename]], returning a handle"""
+        return nexus.load(filename,"r")
+
+    def open_data_unit(nxhandle, entryname=None): 
+        """Open a
+        particular entry in [[nxhandle]].If
+        entryname is not provided, the first entry found is
+        returned."""  
+        entries = [e for e in nxhandle.NXentry] 
+        if entryname is None: return entries[0]
+        our_entry = [e for e in entries if e.nxname == entryname]
+        if len(our_entry) == 1:
+            return our_entry[0]
+        else:
+            raise ValueError, 'Entry %s not found' % entryname
+
+    def create_data_unit(entryname = None):
+        """Start a new data unit"""
+        return NXentry()
+
+    def close_data_unit(nxhandle,entry_struct, memos={}):
+        """Finish all processing in nxhandle. [[memos]] contains any
+        information needed to finish the entry before output."""
+        return entry_struct
+
+    def output_file(filename,data_unit_collection):
+        """Output a file containing the data units in [[data_unit_collection]]"""
+        new_root = nexus.NXroot()
+        for one_entry in range(len(data_unit_collection)):
+            setattr(new_root,"entry"+`one_entry`,data_unit_collection[one_entry])
+        new_root.save(filename)
+        
       
 Example driver
 ==============
@@ -269,6 +299,6 @@ Showing how to use these routines. ::
         if len(sys.argv) > 2:
             filename = sys.argv[1]
             canonical_name = sys.argv[2]
-            file = nexus.NXFile(filename,"r").readfile()
-            for entry in file.NXentry:
-                process(entry,canonical_name)
+            file = open_file(filename,"r")
+            data_unit = open_data_unit(file)
+            process(data_unit,canonical_name)
