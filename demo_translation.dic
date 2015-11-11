@@ -3,18 +3,20 @@
 data_demo_dic
 
 _dictionary.title                       demo_dic
-_dictionary.version                     0.0.1
+_dictionary.version                     0.0.3
 _dictionary.ddl_conformance             3.11.04
 _dictionary.class                       Instance
 _dictionary.namespace                   ?
 _description.text 
                                         'This dictionary was developed as a demonstration dictionary showing how datanames in an olog presentation can be related to one another.'
-_dictionary.date                        2015-11-02
+_dictionary.date                        2015-11-10
 loop_
   _dictionary_audit.version
   _dictionary_audit.date
   _dictionary_audit.revision
-         0.0.1     2015-11-02          'First version(James Hester)()()()()()' 
+         0.0.1     2015-11-02          'First version(James Hester)()()()()()'           
+         0.0.2     2015-11-04          'Added a CIF2-style array for images and a method for constructing a full scan (James Hester)()'   
+         0.0.3     2015-11-10          '()' 
 
 save_DEMO_DIC_HEAD
 
@@ -62,6 +64,62 @@ save__data_axis.id
 _definition.id                          '_data_axis.id'
 _name.object_id                         id
 _name.category_id                       'data_axis'
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save_detector_axis
+
+_name.object_id                         detector_axis
+_name.category_id                       DEMO_DIC_HEAD
+_definition.id                          detector_axis
+_definition.scope                       Category
+_definition.class                       Loop
+_description.text                       'This category contains axes that belong to the detector'
+
+save_
+
+
+save__detector_axis.id
+
+_definition.id                          '_detector_axis.id'
+_name.object_id                         id
+_name.category_id                       detector_axis
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save__detector_axis.offset
+
+_definition.id                          '_detector_axis.offset'
+_name.object_id                         offset
+_name.category_id                       detector_axis
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save__detector_axis.type
+
+_definition.id                          '_detector_axis.type'
+_name.object_id                         type
+_name.category_id                       detector_axis
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save__detector_axis.vector
+
+_definition.id                          '_detector_axis.vector'
+_name.object_id                         vector
+_name.category_id                       detector_axis
 _definition.class                       Datum
 _description.text                       'PLEASE DEFINE ME'
 
@@ -233,7 +291,7 @@ _name.object_id                         binary_id
 _name.category_id                       full_frame
 _definition.class                       Datum
 _description.text 
-                                        'A pointer to the binary block containing the data for this full frame'
+                                        'A pointer to the binary_id containing the data for this full frame.'
 _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
@@ -254,6 +312,62 @@ _type.purpose                           Key
 _type.source                            Assigned
 _type.container                         Single
 _type.contents                          Text
+
+save_
+
+
+save_goniometer_axis
+
+_name.object_id                         goniometer_axis
+_name.category_id                       DEMO_DIC_HEAD
+_definition.id                          goniometer_axis
+_definition.scope                       Category
+_definition.class                       Loop
+_description.text                       'This category contains axes that belong to the goniometer'
+
+save_
+
+
+save__goniometer_axis.id
+
+_definition.id                          '_goniometer_axis.id'
+_name.object_id                         id
+_name.category_id                       goniometer_axis
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save__goniometer_axis.offset
+
+_definition.id                          '_goniometer_axis.offset'
+_name.object_id                         offset
+_name.category_id                       goniometer_axis
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save__goniometer_axis.type
+
+_definition.id                          '_goniometer_axis.type'
+_name.object_id                         type
+_name.category_id                       goniometer_axis
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+
+save_
+
+
+save__goniometer_axis.vector
+
+_definition.id                          '_goniometer_axis.vector'
+_name.object_id                         vector
+_name.category_id                       goniometer_axis
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
 
 save_
 
@@ -314,11 +428,11 @@ _name.object_id                         array_data
 _name.category_id                       scan_array_data
 _definition.class                       Datum
 _description.text 
-                                        'A three-dimensional dataset obtained by concatenating all frames corresponding to a single scan ID in order with each frame assumed to have identical structure.  The data_axis items describe the appropriate axes for this dataset.'
+                                        'A three-dimensional dataset obtained by concatenating all frames corresponding to a single scan ID in order with each frame assumed to have identical structure. '
 _type.purpose                           Number
 _type.source                            Assigned
 _type.container                         Array
-_type.contents                          Real
+_type.contents                          Integer
 loop_
   _method.purpose
   _method.expression
@@ -328,21 +442,21 @@ loop_
   with sad as scan_array_data {
     total_frames = diffrn_scan_simple[sad.scan_id].frames
     # find first frame
-    loop ffs as diffrn_scan_simple {
-        if (ffs.scan_id == sad.scan_id ) {
-            if (diffrn_scan_frame[ffs.frame_id].frame_number == 1) {
-                array_ptr = full_frame[ffs.frame_id].binary_id
-                final_result = array_data[array_ptr]
+    loop dss as diffrn_scan_simple {
+        if (dss.scan_id == sad.scan_id ) {
+            if (diffrn_scan_frame[dss.frame_id].frame_number == 1) {
+                array_ptr = full_frame[dss.frame_id].binary_id
+                final_result = array_data[array_ptr].as_integers  #assuming array_id is key
             }
         }
     }
     # now build up frames in order (this is a very slow way to do it)
     do frame_no = 2,total_frames {
-      loop ffs as diffrn_scan_simple {
-        if (ffs.scan_id == sad.scan_id ) {
-            if (diffrn_scan_frame[ffs.frame_id].frame_number == frame_no) {
-                array_ptr = full_frame[ffs.frame_id].binary_id
-                final_result ++= array_data[array_ptr]
+      loop dss as diffrn_scan_simple {
+        if (dss.scan_id == sad.scan_id ) {
+            if (diffrn_scan_frame[dss.frame_id].frame_number == frame_no) {
+                array_ptr = full_frame[dss.frame_id].binary_id
+                final_result ++= array_data[array_ptr].as_integers
             }
         }
       }
@@ -367,5 +481,20 @@ _type.purpose                           Key
 _type.source                            Assigned
 _type.container                         Single
 _type.contents                          Text
+
+save_
+
+
+save__array_data.as_integers
+
+_definition.id                          '_array_data.as_integers'
+_name.object_id                         as_integers
+_name.category_id                       array_data
+_definition.class                       Datum
+_description.text                       'The data presented as an integer array'
+_type.purpose                           Measurand
+_type.source                            Recorded
+_type.container                         Array
+_type.contents                          Integer
 
 save_

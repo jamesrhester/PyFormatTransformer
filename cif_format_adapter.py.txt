@@ -19,10 +19,11 @@ Set all values for (domain,name)
 3. set_by_domain_value(domain,domain_value,name,value,type)
 Set the value of name corresponding to the value of domain equalling (domain,name)
 
-We use the pycifrw library for access, and the pycbf library for image handling. 
-Because we need to use a completely different, fully-fledged CIF library, we
-have to carry along our file location and blockname in our data object, which
-we simply do using the magic of Python dynamic assignment. ::
+We use the pycifrw library for access, and the pycbf library for image
+handling.  Because pycbf requires initialising from the filename, but
+is called from within a pycifrw CifBlock structure, we have to carry
+along our file location and blockname in our data object, which we
+simply do using the magic of Python dynamic assignment. ::
   
     import pycbf
     import CifFile
@@ -48,7 +49,7 @@ value has to be converted (units, list of restricted values, array creation)::
 Converting values
 =================
 
-We need to match the types 'Real', 'Int' and 'Text'.  As CIF is text-based,
+We start out matching the types 'Real', 'Int' and 'Text'.  As CIF is text-based,
 this means we simply apply the relevant conversions.  For speed, we assume
 that incoming is iterable, rather than mapping [[convert_type]] itself to
 each element. ::
@@ -63,6 +64,8 @@ each element. ::
             return [int(a) for a in incoming]
         elif target_type == "Text":
             return incoming
+        else:
+            raise ValueError, 'Type %s not recognised' % target_type
 
 Converting simple lists
 -----------------------

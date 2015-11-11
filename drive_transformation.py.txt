@@ -2,11 +2,12 @@ Introduction
 ============
 
 This file demonstrates an ontology-driven transformation between file
-formats as discussed in Hester (2016).  In order to operate it
-needs (i) the nx and CIF format adapters written in Python and
-provided with this file; (ii) the dREL dictionary also provided.
+formats as discussed in Hester (2016).  In order to operate it one
+needs (i) the nx and CIF format adapters (and dependencies) written in
+Python and provided with this file; (ii) the dREL dictionary also
+provided; (iii) the PyCIFRW package (for dREL transformations).
 Transformation is driven by a list of canonical names (dataname
-bundle) provided in an external file and an input file conforming to
+bundle) provided in an external text file and an input file conforming to
 either the CIF or NeXus standards.  For each canonical name, the
 system attempts to read that name from the input file using the
 appropriate adapter. If not found, the system looks up that name in
@@ -17,6 +18,7 @@ output to the output format adapter. ::
 
     import nx_format_adapter,cif_format_adapter
     from CifFile import CifDic
+    debug_adapter = None  #forward declaration
 
 Data tables
 ===========
@@ -26,6 +28,147 @@ These tables configure the operation of the transformation. ::
     tranform_table = {"nexus":nx_format_adapter,
                       "cif":cif_format_adapter,
                       "plain":debug_adapter}
+
+dREL configuration
+==================
+
+In order to use our dREL transformer, we must create an object that
+can access our intput file with a Python '__getitem__', 'has_key' and
+'GetKeyedSemanticPacket' method (see section "Configuration" in
+py_from_ast.nw.).  This object will recursively call itself to access
+any missing data.  We define a class which we initialise with the
+relevant format adapter. ::
+
+    class GenericInput(dict):
+        """A class that can be fed to dREL for recursive evaluation"""
+        def __init__(self,input_module,datahandle,dictionary,*args,**kwargs):
+            """input_module is a format adapter that has method 
+            get_by_location"""
+            super(GenericInput,self).__init__(*args,**kwargs)
+            if not hasattr(input_module,"get_by_location"):
+                raise KeyError, 'Input module does not meet API'
+            self.input_module = input_module
+            self.datahandle = datahandle
+            self.dictionary = dictionary
+            # dummy items to make derive_item happy
+            self.provide_value = None
+            self.loops = []
+
+        def __getitem__(self,name):
+            """Return an item as standard type"""
+            if super(GenericInput,self).has_key(name):  #stored already
+                return super(GenericInput,self).__getitem__(name)
+            our_type = self.dictionary[name]['_type.contents']
+            return self.input_module.get_by_location(self.datahandle,name,our_type)
+
+        def has_key(self,name):
+            try:
+                test = self.__getitem__(name)
+            except:
+                return False
+            if test is None:
+                return False
+            return True
+
+Semantic packets
+----------------
+
+See the section on the Packet class to explain why these are important
+in dREL.  DDLm dictionaries allow categories to be nested, which is
+another way of saying that the set of datanames mapping from a single
+domain are split into two or more groups, which as a result have
+different keys that really refer to the same domain.  To account for
+this, we have to loop over the possible keys rather than just do a
+straighforward lookup. ::
+ 
+        def GetKeyedSemanticPacket(value,cat_id):
+            """Return a packet containing the values for datanames
+            corresponding to the value given for dataname keyname"""
+            target_keys = self.dictionary.cat_key_table[cat_id]
+            p = Packet()
+            # set case-sensitivity flag
+            lcase = False
+            if self.dictionary[target_keys[0]]['_type.contents'] in ['Code','Tag','Name']:
+                lcase = True
+            for cat_key in target_keys:
+                if not self.has_key(cat_key): continue   #couldn't be generated
+                try:
+                    extra_packet = self.GetKeyedPacket(cat_key,keyvalue,all_names,no_case=lcase)
+                except ValueError:      #none/more than one, assume none
+                    continue
+                p.merge_packet(extra_packet)
+            # the following attributes used to calculate missing values
+            for keyname in target_keys:
+                if hasattr(p,keyname):
+                    p.key = keyname
+                    break
+            if not hasattr(p,"key"):
+                raise ValueError, "No key found for %s, packet is %s" % (cat_id,str(p))
+            p.cif_dictionary = self.dictionary
+            p.fulldata = self
+            return p
+
+        def GetKeyedPacket(keyname,keyvalue,all_names):
+            """Return a packet that provides the corresponding values of [[all_names]] where
+            keyname == keyvalue"""
+            key_vals = self[keyname]
+            key_pos = self[keyname].index(keyvalue)
+            out_packet = Packet()
+            for one_name in all_names:
+                if self.has_key(one_name):
+                    target_val = self[one_name][index]
+                    out_packet.extend(target_val)
+                    setattr(out_packet,one_name,target_val)
+            return out_packet
+
+Unused stubs
+============
+
+These stubs are purely to satisfy the requirements of the dictionary derive_item
+method, and are not necessary for correct operation. ::
+
+        def AddLoopName(self,dummy1,dummy2):
+            pass
+
+        def CreateLoop(self,key):
+            pass
+
+        def ChangeItemOrder(self,key):
+            pass
+
+
+Packets
+=======
+
+A critical feature of dREL is the ability to index into a different domain and access
+datanames of that domain.  To support this, we have to return a packet which supports
+the 'getattr' method.  The following code is adapted from that found in PyCIFRW. Note
+that in order to further calculate dataname values using the dictionary, each packet 
+stores a link to the full dictionary and the data object. The dictionary ::
+
+    class Packet(list):
+        def merge_packet(self,incoming):
+            """Merge contents of incoming packet with this packet"""
+            new_attrs = [a for a in dir(incoming) if a[0] == '_' and a[1] != "_"]
+            self.extend(incoming)
+            for na in new_attrs:
+                setattr(self,na,getattr(incoming,na))
+
+        def __getattr__(self,att_name):
+            """Derive a missing attribute"""
+            if att_name.lower() in self.__dict__:
+                return getattr(self,att_name.lower())
+            if att_name in ('cif_dictionary','fulldata','key'):
+                raise AttributeError, 'Programming error: can only assign value of %s' % att_name
+            d = self.cif_dictionary
+            c = self.fulldata
+            k = self.key
+            d.derive_item(att_name,c,store_value=True)
+            # 
+            # now pick out the new value
+            keyval = getattr(self,k)
+            full_pack = c.GetKeyedPacket(k,keyval)
+            return getattr(full_pack,att_name)
 
 Overall control
 ===============
@@ -65,7 +208,7 @@ that name takes multiple values, it is prefixed by an asterisk (*).::
         """Get datanames from the file"""
         names = open(name_file).readlines()
         names = [n.split(",") for n in names]
-        multinames = [n[0][1:],n[1] for n in names if n[0][0]=="*"]
+        multinames = [(n[0][1:],n[1]) for n in names if n[0][0]=="*"]
         singlenames = [n for n in names if n[0][0]!="*"]
         return singlenames,multinames
         
@@ -89,24 +232,24 @@ language, which we convert to an API-dependent form for execution. ::
 Command-line interface
 ======================
 
-Three arguments are expected: the dataname bundle, the input file type (nexus or cif),
+Four arguments are expected: the dataname bundle, the input file type (nexus or cif),
 and the input file name. ::
 
     if __name__=="__main__":
         import sys
         if len(sys.argv)<5:
-            print "Usage: drive_transform <dataname bundle> <nexus/cif> <filename> <nexus/cif> <filename> (data unit name)"
+            print "Usage: drive_transform <dataname bundle> <nexus/cif> <input filename> <nexus/cif> <output filename> (data unit name)"
             exit
         name_bundle = sys.argv[0]
         filetype = sys.argv[1]
         infile = sys.argv[2]
         outtype = sys.argv[3]
         outfile = sys.argv[4]
-        if len(sys.argv)<6:
+        if len(sys.argv)>5:
             data_unit_name = sys.argv[5]
         else:
             data_unit_name = None
-        execute_transform(name_bundle,filetype,infile,outtype,outfile,dataname=data_unit_name)
+        manage_transform(name_bundle,filetype,infile,outtype,outfile,dataname=data_unit_name)
 
 
  
