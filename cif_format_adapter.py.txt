@@ -37,14 +37,66 @@ a direct match, or individual values are embedded in a string value.  None of
 the latter are covered here. An optional function is included in case the
 value has to be converted (units, list of restricted values, array creation)::
 
-    canonical_name_locations_mx = {
+    canonical_name_locations = {
     "source current": ["_diffrn_source.current",None],
     "incident wavelength":["_diffrn_radiation_wavelength.wavelength",None],
     "probe":["_diffrn_radiation.probe",convert_probe],
     "start time": ["_diffrn_scan.date_start",None],
     "axis vector":["_axis.vector",None],
-    "axis id":["_axis.id",None]
+    "axis offset":["_axis.offset",None],
+    "axis type":["_axis.type",None],
+    "axis id":["_axis.id",None],
+    "detector axis set id":["_array_structure_list_axis.axis_set_id",None],
+    "detector axis set component axis":["_array_structure_list_axis.axis_id",None],
+    "axis vector X component":["_axis.vector[1]",None],
+    "axis vector Y component":["_axis.vector[2]",None],
+    "axis vector Z component":["_axis.vector[3]",None],
+    "axis offset X component":["_axis.offset[1]",None],
+    "axis offset Y component":["_axis.offset[2]",None],
+    "axis offset Z component":["_axis.offset[3]",None],
+    "scan id":["_diffrn_scan.id",None],
+    "number of frames":["_diffrn_scan.frames",None],
+    "scan axis key":["_diffrn_scan_axis.key",None],
+    "scan axis axis id":["_diffrn_scan_axis.axis_id",None],
+    "scan axis scan id":["_diffrn_scan_axis.scan_id",None],
+    "scan axis angle increment":["_diffrn_scan_axis.angle_increment",None],
+    "scan axis displacement increment":["_diffrn_scan_axis.displacement_increment",None],
+    "detector key":["_diffrn_detector.key",None],
+    "detector id":["_diffrn_detector.id",None],
+    "detector number of axes":["_diffrn_detector.number_of_axes",None],
+    "detector scan":["_diffrn_detector.diffrn_id",None],
+    "detector name":["_diffrn_detector.detector",None],
+    "detector element detector id":["_diffrn_detector_element.detector_id",None],
+    "detector element id":["_diffrn_detector_element.id",None],
+    "data frame id":["_diffrn_data_frame.id",None],
+    "data frame binary id":["_diffrn_data_frame.binary_id",None],
+    "data frame array id":["_diffrn_data_frame.array_id",None],
+    "data frame scan id":["_diffrn_data_frame.scan_id",None],
+    "data frame element id":["_diffrn_data_frame.detector_element_id",None],
+    "scan frame key":["_diffrn_scan_frame.key",None],
+    "scan frame scan id":["_diffrn_scan_frame.scan_id",None],
+    "scan frame frame id":["_diffrn_scan_frame.frame_id",None],
+    "scan frame sequence number":["_diffrn_scan_frame.frame_number",None],
+    "simple scan frame key":["_diffrn_scan_simple_frame.key",None],
+    "2D data identifier":["_array_data.binary_id",None],
+    "2D data structure id":["_array_data.array_id",None],
+    "2D data":["_array_data.as_integers",None]
     }
+
+The adapter class
+=================
+
+In general PyCIFRW provides us with adequate support, but for uniformity we
+use the same structure as the NeXus adapter. ::
+
+    class CifAdapter(object):
+        """A class to implement a uniform format adapter for CIF"""
+        def __init__(self,location_config,domain_config):
+            self.name_locations = location_config
+            self.domain_names = domain_config
+            self.filehandle = None
+            self.cifblock = None
+            self.all_blocks = {}
 
 Converting values
 =================
@@ -54,18 +106,18 @@ this means we simply apply the relevant conversions.  For speed, we assume
 that incoming is iterable, rather than mapping [[convert_type]] itself to
 each element. ::
 
-    def convert_type(incoming,target_type):
-        """Convert all elements of incoming to [[target_type]]"""
-        if not isinstance(incoming,(list,tuple)):
-            incoming = [incoming]
-        if target_type == "Real":
-            return [float(a) for a in incoming]
-        elif target_type == "Int":
-            return [int(a) for a in incoming]
-        elif target_type == "Text":
-            return incoming
-        else:
-            raise ValueError, 'Type %s not recognised' % target_type
+        def convert_type(self,incoming,target_type):
+            """Convert all elements of incoming to [[target_type]]"""
+            if not isinstance(incoming,(list,tuple)):
+                incoming = [incoming]
+            if target_type == "Real":
+                return [float(a) for a in incoming]
+            elif target_type in ("Count","Index","Integer"):
+                return [int(a) for a in incoming]
+            elif target_type in ("Text","Code"):
+                return incoming
+            else:
+                raise ValueError, 'Type %s not recognised' % target_type
 
 Converting simple lists
 -----------------------
@@ -73,11 +125,11 @@ Converting simple lists
 Some values are chosen from short lists of alternatives.  The following routine
 lists the conversions. ::
 
-    def convert_probe(incoming):
-        """Convert the value of incoming to the appropriate one for
-        radiation type"""
-        # not yet done.
-        return incoming
+        def convert_probe(incoming):
+            """Convert the value of incoming to the appropriate one for
+            radiation type"""
+            # not yet done.
+            return incoming
 
 The API functions
 =================
@@ -87,26 +139,33 @@ Obtaining values
 
 We very simply return the specified dataname, unless an image is requested, in 
 which case we have to process the CBF/imgCIF image data into a standard,
-format agnostic numpy array.::
+format agnostic numpy array.  We cache this to avoid reading a multi-megabyte
+file every time. ::
 
-    def get_by_location(datahandle,name,value_type,domain=None):
-        """Return values as [[value_type]] for [[name]]"""
-        if name == "2D array data":  #special name
-            return create_images(datahandle)
-        else:
-            cif_location,transform = canonical_name_locations_mx.get(name,(None,None))
-            if cif_location is None:
-                return None
-            try:
-                values = datahandle[cif_location]
-            except:
-                print "Couldn't find %s" % cif_location
-                return None    #couldn't be done
-            if transform is not None:
-                values = transform(values)
-            if isinstance(values,(basestring,int,float,complex)):
-                values = [values]
-            return convert_type(values,value_type)
+        def get_by_location(self,name,value_type,domain=None):
+            """Return values as [[value_type]] for [[name]]"""
+            if name == "2D data":  #special name
+                if self.cifblock.image_cache is None:
+                    print "CIF: creating image cache"
+                    all_images = self.create_images()
+                    self.cifblock.image_cache = all_images
+                print 'CIF: Returning contents of image cache'
+                return self.cifblock.image_cache
+            else:
+                cif_location,transform = self.name_locations.get(name,(None,None))
+                if cif_location is None:
+                    print "Debug: no location found for %s" % name
+                    return None
+                try:
+                    values = self.cifblock[cif_location]
+                except KeyError:
+                    print "Couldn't find %s" % cif_location
+                    return None    #couldn't be done
+                if transform is not None:
+                    values = transform(values)
+                if isinstance(values,(basestring,int,float,complex)):
+                    values = [values]
+                return self.convert_type(values,value_type)
 
 Setting values
 --------------
@@ -114,10 +173,10 @@ Setting values
 CIF requires everything to be a string.  This is handled automatically
 by the PyCIFRW system, and the supplied value is assumed to be correct. ::
 
-    def set_by_location(datahandle,name,value,value_type,domain=None):
-        cif_location = canonical_name_locations_mx.get(name,(None,None))[0]
-        if cif_location is not None:
-            datahandle[cif_location] = value
+        def set_by_location(self,name,value,value_type,domain=None):
+            cif_location = self.name_locations.get(name,(None,None))[0]
+            if cif_location is not None:
+                datahandle[cif_location] = value
 
 
 Housekeeping
@@ -126,45 +185,51 @@ Housekeeping
 When opening and closing files and data units, we record the filename and
 blockname so that we can reopen the file with pycbf if asked for an image. ::
 
-    def open_file(filename):
-         """Open the CIF file [[filename]], returning a handle"""
-         ciffile = CifFile.CifFile(filename)
-         return ciffile
+        def open_file(self,filename):
+             """Open the CIF file [[filename]], returning a handle"""
+             self.filehandle = CifFile.CifFile(filename,grammar="auto")
 
-    def open_data_unit(cifhandle,entryname=None):
-        """Open a particular datablock in [[cifhandle]]. If
-        an entryname is not provided, a quasi-random one is
-        returned"""
-        if entryname is not None and cifhandle.has_key(entryname):
-            cifblock = cifhandle[entryname]
-            cifblock.blockname = entryname
-        elif entryname is None:
-            cifblock = cifhandle.first_block()
-            cifblock.blockname = cifhandle.keys()[0]
-        else:
-            raise KeyError, 'No such block %s in CIF file' % entryname
-        cifblock.filename = cifhandle.my_uri
-        return cifblock
+        def open_data_unit(self,entryname=None):
+            """Open a particular datablock. If
+            an entryname is not provided, a quasi-random one is
+            returned"""
+            if entryname is not None and self.filehandle.has_key(entryname):
+                self.cifblock = cifhandle[entryname]
+                self.cifblock.blockname = entryname  #remember
+            elif entryname is None:
+                self.cifblock = self.filehandle.first_block()
+                self.cifblock.blockname = self.filehandle.keys()[0]
+            else:
+                raise KeyError, 'No such block %s in CIF file' % entryname
+            self.cifblock.filename = self.filehandle.my_uri
+            self.cifblock.image_cache = None
 
-    def create_data_unit(entryname = None):
-        """Start a new data unit"""
-        return CifBlock()
+        def create_data_unit(self,entryname = None):
+            """Start a new data unit"""
+            self.cifblock = CifBlock()
+            if entryname is not None:
+                self.cifblock.blockname = entryname
 
-    def close_data_unit(datafile, datablock, memos = {}):
-        """Finish off [[datablock]] in file [[datafile]]"""
-        # nothing to do in our case
-        return datablock
+        def close_data_unit(self):
+            """Finish off [[datablock]] in file [[datafile]]"""
+            # nothing to do in our case
+            self.all_blocks.append(self.cifblock)
+            self.cifblock = None
+            return
 
-    def output_file(filename, datablocks):
-        """Output a file containing the list of datablocks"""
-        cf = CifFile()
-        # for each generate simple block name
-        for block in datablocks:
-            newblockname = "Block_%d" % len(cf)+1
-            cf[newblockname] = block
-        f = open(filename,"w")
-        f.write(str(cf))
-        f.close()
+        def output_file(self,filename):
+            """Output a file containing the list of datablocks"""
+            cf = CifFile()
+            # for each generate simple block name
+            for block in self.all_blocks:
+                if hasattr(block,blockname):
+                    newblockname = block.blockname
+                else:
+                    newblockname = "Block_%d" % len(cf)+1
+                cf[newblockname] = block
+            f = open(filename,"w")
+            f.write(str(cf))
+            f.close()
 
 Creating images
 ===============
@@ -172,40 +237,41 @@ Creating images
 The image data stored in imgCIF is a string (as CIF has not yet
 defined images in terms of CIF2 array types) which require further
 processing to create a multidimensional Numpy array.  The present
-returns a proper array for each image in the file.  Note that this
+routine returns a proper array for each image in the file.  Note that this
 routine is for demonstration purposes and does not attempt to
 cover all possible array presentations possible in imgCIF: the
 point is that such processing is handled only in this format
 adapter routine and nowhere else. ::
 
-    def create_images(datablock):
-        """Return a set of numpy image arrays for this file"""
-        import numpy
-        # for each image, get the array
-        blockname = datablock.blockname
-        filename = datablock.filename
-        cbf_file = pycbf.cbf_handle_struct()
-        cbf_file.read_file(filename,pycbf.MSG_DIGEST)
-        cbf_file.rewind_datablock()
-        cbf_file.find_datablock(blockname)
-        cbf_file.find_category('array_data')
-        cbf_file.find_column('data')
-        cbf_file.rewind_row()  #start at first row
-        no_of_rows = cbf_file.count_rows()
-        print 'Found %d rows in %s[%s]' % (no_of_rows,filename,blockname)
-        final_images = []
-        for image_no in range(no_of_rows):
-            parms = cbf_file.get_integerarrayparameters_wdims_fs()
-            dimfast = parms[9]
-            dimslow = parms[11]
-            dimmid = parms[10]
-            print 'Image %d: %d x %d' % (image_no,dimfast,dimmid)
-            string_image = cbf_file.get_integerarray_as_string()
-            numpy_image = numpy.fromstring(string_image,numpy.uint32)
-            ff = numpy_image.reshape(dimfast,dimmid)
-            final_images.append(ff)
-            cbf_file.next_row()
-        return final_images
+        def create_images(self):
+            """Return a set of numpy image arrays for this file"""
+            import numpy
+            # for each image, get the array
+            blockname = self.cifblock.blockname.encode('ascii','ignore') #plain ASCII
+            filename = self.cifblock.filename
+            print 'Getting image from file %s, block %s' % (filename,blockname)
+            cbf_file = pycbf.cbf_handle_struct()
+            cbf_file.read_file(filename,pycbf.MSG_DIGEST)
+            cbf_file.rewind_datablock()
+            cbf_file.find_datablock(blockname)
+            cbf_file.find_category('array_data')
+            cbf_file.find_column('data')
+            cbf_file.rewind_row()  #start at first row
+            no_of_rows = cbf_file.count_rows()
+            print 'Found %d rows in %s[%s]' % (no_of_rows,filename,blockname)
+            final_images = []
+            for image_no in range(no_of_rows):
+                parms = cbf_file.get_integerarrayparameters_wdims_fs()
+                dimfast = parms[9]
+                dimslow = parms[11]
+                dimmid = parms[10]
+                print 'Image %d: %d x %d' % (image_no,dimfast,dimmid)
+                string_image = cbf_file.get_integerarray_as_string()
+                numpy_image = numpy.fromstring(string_image,numpy.uint32)
+                ff = numpy_image.reshape(dimfast,dimmid)
+                final_images.append(ff)
+                cbf_file.next_row()
+            return final_images
 
 Example processing
 ==================

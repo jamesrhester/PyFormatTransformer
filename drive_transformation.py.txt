@@ -8,15 +8,11 @@ Python and provided with this file; (ii) the dREL dictionary also
 provided; (iii) the PyCIFRW package (for dREL transformations).
 Transformation is driven by a list of canonical names (dataname
 bundle) provided in an external text file and an input file conforming to
-either the CIF or NeXus standards.  For each canonical name, the
-system attempts to read that name from the input file using the
-appropriate adapter. If not found, the system looks up that name in
-the dREL dictionary and transforms any transformation method found
-into python using the API appropriate to the input file.  Following
-this the method is executed and, if successful, the resulting value is
-output to the output format adapter. ::
+either the CIF or NeXus standards.  A generic adapter object is initialised
+with this information. ::
 
-    import nx_format_adapter,cif_format_adapter
+    import nx_format_adapter as nx
+    import cif_format_adapter as cf
     from CifFile import CifDic
     debug_adapter = None  #forward declaration
 
@@ -25,8 +21,8 @@ Data tables
 
 These tables configure the operation of the transformation. ::
 
-    tranform_table = {"nexus":nx_format_adapter,
-                      "cif":cif_format_adapter,
+    transform_table = {"nexus":nx.NXAdapter(nx.canonical_name_locations_mx,nx.canonical_groupings),
+                      "cif":cf.CifAdapter(cf.canonical_name_locations,{}),
                       "plain":debug_adapter}
 
 dREL configuration
@@ -37,38 +33,231 @@ can access our intput file with a Python '__getitem__', 'has_key' and
 'GetKeyedSemanticPacket' method (see section "Configuration" in
 py_from_ast.nw.).  This object will recursively call itself to access
 any missing data.  We define a class which we initialise with the
-relevant format adapter. ::
+relevant format adapter.  
+
+We also provide a filter option, which allows us to restrict returned
+values to those that match the filter criteria.  This ensures that the
+dREL methods only operate on those rows that match the criteria.
+
+ ::
 
     class GenericInput(dict):
         """A class that can be fed to dREL for recursive evaluation"""
-        def __init__(self,input_module,datahandle,dictionary,*args,**kwargs):
+        def __init__(self,input_module,dictionary,*args,**kwargs):
             """input_module is a format adapter that has method 
-            get_by_location"""
+            get_by_location and is already initialised by file and blockname"""
             super(GenericInput,self).__init__(*args,**kwargs)
-            if not hasattr(input_module,"get_by_location"):
-                raise KeyError, 'Input module does not meet API'
             self.input_module = input_module
-            self.datahandle = datahandle
             self.dictionary = dictionary
             # dummy items to make derive_item happy
             self.provide_value = None
             self.loops = []
+            self.filters = {}
+            self.setup_translation()
 
-        def __getitem__(self,name):
+        def __getitem__(self,name,use_drel=True):
             """Return an item as standard type"""
+            print 'DEBUG: Accessing %s' % name
             if super(GenericInput,self).has_key(name):  #stored already
                 return super(GenericInput,self).__getitem__(name)
             our_type = self.dictionary[name]['_type.contents']
-            return self.input_module.get_by_location(self.datahandle,name,our_type)
+            generic_name = self.generic_name_table[name]
+            result = self.input_module.get_by_location(generic_name,our_type)
+            if len(self.filters)>0:
+                result = self.apply_filters(generic_name,result,our_type)
+            if result is None and use_drel:  #need to use dREL fu
+                print "=== Deriving %s as not found in datafile" % name
+                result = self.dictionary.derive_item(name,self)
+                if result is not None:
+                    self[name] = result
+                    print "===Successfully derived %s = %s" % (name,result)
+                else:
+                    print 'Warning: derivation of %n failed'
+            return result
+            
+        def __setitem__(self,name,value):
+            """Set a value, after checking"""
+            if value is None or None in value:
+                raise ValueError, "Attempt to set None value for %s" % name
+            print 'Setting %s to %s' % (name,value)
+            super(GenericInput,self).__setitem__(name,value)
 
         def has_key(self,name):
+            import traceback
+            print 'Debug: checking for %s' % name
             try:
-                test = self.__getitem__(name)
-            except:
+                test = self.__getitem__(name,use_drel=False)
+            except KeyError:
+                print '%s not found (KeyError)' % name
                 return False
             if test is None:
+                print '%s not found (None returned)' % name
                 return False
             return True
+
+        def get_type(self,name):
+            """Return the dictionary-defined type of the given canonical name"""
+            drel_name = self.get_drel_name(name)
+            return self.dictionary[drel_name]['_type.contents']
+
+        def get_drel_name(self,name):
+            """Return a value using the canonical name as input"""
+            drel_name = [k[0] for k in self.generic_name_table.items() if k[1]==name]
+            if len(drel_name)!= 1:
+                raise KeyError, 'Unrecognised/ambiguous canonical name %s' % name
+            return drel_name[0]
+            
+        def get_by_canonical_name(self,name):
+            drel_name = self.get_drel_name(name)
+            return self[drel_name]
+
+
+Handling multiple data units
+----------------------------
+
+If (as is likely) the output data unit expects only a single value for certain datanames,
+we must emit multiple data units for each value that we encounter.  We create a list of
+multi-valued input datanames, and create a data unit schedule such that each distinct
+combination of values is given a separate data unit. ::
+
+        def slice_and_dice(self,data_unit_spec):
+            """Determine which values will need separate data units"""
+            multi_vals = {}
+            for can_name in data_unit_spec:    #single-valued
+                can_vals = self.get_by_canonical_name(can_name)
+                if can_vals is not None and len(can_vals)>1:
+                    multi_vals[can_name] = can_vals
+            # create a schedule: an array of values taken by each dataname
+            schedule = {}
+            for one_name in multi_vals.keys():
+                if len(schedule)==0: old_length = 1
+                else: old_length = len(schedule[schedule.keys()[0]])
+                for one_entry in schedule.keys():
+                    schedule[one_entry] = schedule[one_entry]*len(multi_vals[one_name])
+                schedule[one_name] = []
+                [schedule[one_name].extend([p]*old_length) for p in multi_vals[one_name]]
+            return schedule
+
+Filters
+-------
+
+The other side of the coin to slicing and dicing is ensuring that all manipulations
+are performed 'as if' the relevant datanames only take a single value.  We therefore
+define simple 'filters' that are checked each time data are returned to make sure
+that no non-matching rows are provided.  We expect to operate only on keys (or
+pointers to keys) as all items are ultimately functions of keys and therefore keys
+must be present in the file in order to properly interpret any of these datanames
+(i.e. functions of keys). Note all filter names are drel names, not canonical names. ::
+
+        def add_filter(self,item_name,item_value):
+            """Allow only rows with item_name == item_value to be returned, including
+            any linked keys"""
+            drel_name = self.get_drel_name(item_name)
+            self.filters[drel_name] = item_value
+            linked_items = [k for k in self.dictionary.keys() if self.dictionary[k].get('_name.linked_item_id',None) == drel_name]
+            while self.dictionary[drel_name].get('_name.linked_item_id',None) is not None:
+                drel_name = self.dictionary[drel_name]['_name.linked_item_id']
+                linked_items.append(drel_name)
+            for li in linked_items:
+                self.filters[li] = item_value
+            print 'Linked to %s: ' % item_name 
+            print `linked_items`
+
+        def apply_filters(self,name,result,our_type):
+            """Check all of our filters to see if any match. If so, edit result so
+            that only matching entries are returned"""
+            if result is None: return result
+            drel_name = self.get_drel_name(name)
+            drel_cat = self.dictionary[drel_name]['_name.category_id']
+            names_in_cat = [n for n in self.dictionary.keys() if self.dictionary[n].get('_name.category_id',"") == drel_cat]
+            intersection = [(self.generic_name_table[n],self.dictionary[n]['_type.contents']) for n in names_in_cat if n in self.generic_name_table.keys() and n in self.filters.keys()]
+            print 'Intersection: ' + `intersection`
+            actually_there = [n[0] for n in intersection if self.input_module.get_by_location(n[0],n[1]) is not None]
+            # now edit
+            print 'Actually there:' + `actually_there`
+            accept_list = [True] * len(result)
+            for filter_name in actually_there:
+                filter_drel = self.get_drel_name(filter_name)
+                filter_type = self.dictionary[filter_drel]['_type.contents']
+                filter_values = self.input_module.get_by_location(filter_name,filter_type)
+                print 'Ready to filter: %s %s, matching %s' % (filter_name,`filter_values`,`self.filters[filter_drel]`)
+                accept_list = [(p[0] and (p[1]==self.filters[filter_drel])) for p in zip(accept_list,filter_values)]
+            print 'Filtered on %s, obtained %s for %s' % (actually_there,accept_list,result)
+            return [r[0] for r in zip(result,accept_list) if r[1]]
+            
+Name translation
+----------------
+
+Note that dREL and our dictionary uses names in "_domain.name"
+format, meaning that our "__getitem__" method must convert these names
+into our 'generic' names before accessing the underlying format
+adapter.  Of course, for CIF, we are doing an extra round of
+processing, but we allow this in order to show how a completely
+generic system works. The following table converts a dREL(i.e CIF)
+name to the generic equivalent. ::
+
+        def setup_translation(self):
+            """Install a name translation dictionary"""
+            self.generic_name_table = {
+            "_diffrn_radiation_wavelength.wavelength":"incident wavelength",
+            "_diffrn_scan.date_start":"start time",
+            "_diffrn_source.current":"source current",
+            "_simple_detector_axis.id":"detector axis id",
+            "_simple_detector_axis.vector":"detector axis vector",
+            "_simple_detector_axis.offset":"detector axis offset",
+            "_simple_detector_axis.type":"detetor axis type",
+            "_array_structure_list_axis.axis_set_id":"detector axis set id",
+            "_array_structure_list_axis.axis_id":"detector axis set component axis",
+            "_axis.id":"axis id",
+            "_axis.vector":"axis vector",
+            "_axis.offset":"axis offset",
+            "_axis.type":"axis type",
+            "_axis.depends_on":"axis depends on",
+            "_axis.vector[1]":"axis vector X component",
+            "_axis.vector[2]":"axis vector Y component",
+            "_axis.vector[3]":"axis vector Z component",
+            "_axis.offset[1]":"axis offset X component",
+            "_axis.offset[2]":"axis offset Y component",
+            "_axis.offset[3]":"axis offset Z component",
+            "_scan_array_data.array_data":"full simple data",
+            "_scan_array_data.scan_id":"full simple data scan id",
+            "_diffrn_scan.id":"scan id",
+            "_diffrn_scan.frames":"number of frames",
+            "_diffrn_scan_simple.scan_id":"simple scan data id",
+            "_diffrn_scan_simple.axis_id":"simple scan axis",
+            "_diffrn_scan_simple_frames.key":"simple scan frame key",
+            "_diffrn_scan_simple_frames.frame_id":"simple scan frame frame id",
+            "_diffrn_scan_simple_frames.scan_id":"simple scan frame scan id",
+            "_diffrn_scan_axis.key":"scan axis key",
+            "_diffrn_scan_axis.axis_id":"scan axis axis id",
+            "_diffrn_scan_axis.scan_id":"scan axis scan id",
+            "_diffrn_scan_axis.angle_increment":"scan axis angle increment",
+            "_diffrn_scan_axis.displacement_increment":"scan axis displacement increment",
+            "_full_frame.id":"full frame id",
+            "_full_frame.frame_id":"full frame frame id",
+            "_full_frame.binary_id":"full frame binary id",
+            "_full_frame.array_id":"full frame array id",
+            "_full_frame.scan_id":"full frame scan id",
+            "_diffrn_detector.key":"detector key",
+            "_diffrn_detector.id":"detector id",
+            "_diffrn_detector.number_of_axes":"detector number of axes",
+            "_diffrn_detector.diffrn_id":"detector scan",
+            "_diffrn_detector.detector":"detector name",
+            "_diffrn_detector_element.detector_id":"detector element detector id",
+            "_diffrn_detector_element.id":"detector element id",
+            "_diffrn_data_frame.id":"data frame id",
+            "_diffrn_data_frame.binary_id":"data frame binary id",
+            "_diffrn_data_frame.array_id":"data frame array id",
+            "_diffrn_data_frame.scan_id":"data frame scan id",
+            "_diffrn_data_frame.detector_element_id":"data frame element id",
+            "_diffrn_scan_frame.key":"scan frame key",
+            "_diffrn_scan_frame.scan_id":"scan frame scan id",
+            "_diffrn_scan_frame.frame_id":"scan frame frame id",
+            "_diffrn_scan_frame.frame_number":"scan frame sequence number",
+            "_array_data.binary_id":"2D data identifier",
+            "_array_data.array_id":"2D data structure id",
+            "_array_data.as_integers":"2D data"
+            }
 
 Semantic packets
 ----------------
@@ -81,17 +270,22 @@ different keys that really refer to the same domain.  To account for
 this, we have to loop over the possible keys rather than just do a
 straighforward lookup. ::
  
-        def GetKeyedSemanticPacket(value,cat_id):
+        def GetKeyedSemanticPacket(self,keyvalue,cat_id):
             """Return a packet containing the values for datanames
             corresponding to the value given for dataname keyname"""
             target_keys = self.dictionary.cat_key_table[cat_id]
-            p = Packet()
+            p = Packet(self.dictionary,self)
             # set case-sensitivity flag
             lcase = False
             if self.dictionary[target_keys[0]]['_type.contents'] in ['Code','Tag','Name']:
                 lcase = True
             for cat_key in target_keys:
-                if not self.has_key(cat_key): continue   #couldn't be generated
+                all_names = [n for n in self.dictionary.keys() if self.dictionary[n].get('_name.category_id',None)==cat_id]
+                if not self.has_key(cat_key):
+                    dummy = self[cat_key]   #try to generate it
+                    if not self.has_key(cat_key):
+                        print 'Warning: key %s not found or generable' % cat_key
+                        continue   #couldn't be generated
                 try:
                     extra_packet = self.GetKeyedPacket(cat_key,keyvalue,all_names,no_case=lcase)
                 except ValueError:      #none/more than one, assume none
@@ -104,20 +298,19 @@ straighforward lookup. ::
                     break
             if not hasattr(p,"key"):
                 raise ValueError, "No key found for %s, packet is %s" % (cat_id,str(p))
-            p.cif_dictionary = self.dictionary
-            p.fulldata = self
             return p
 
-        def GetKeyedPacket(keyname,keyvalue,all_names):
+        def GetKeyedPacket(self,keyname,keyvalue,all_names,no_case='ignored'):
             """Return a packet that provides the corresponding values of [[all_names]] where
             keyname == keyvalue"""
             key_vals = self[keyname]
             key_pos = self[keyname].index(keyvalue)
-            out_packet = Packet()
+            out_packet = Packet(self.dictionary,self)
             for one_name in all_names:
                 if self.has_key(one_name):
-                    target_val = self[one_name][index]
-                    out_packet.extend(target_val)
+                    print 'Picking element %d of value %s for %s' % (key_pos,`self[one_name]`,one_name)
+                    target_val = self[one_name][key_pos]
+                    out_packet.append(target_val)
                     setattr(out_packet,one_name,target_val)
             return out_packet
 
@@ -133,7 +326,7 @@ method, and are not necessary for correct operation. ::
         def CreateLoop(self,key):
             pass
 
-        def ChangeItemOrder(self,key):
+        def ChangeItemOrder(self,key,order):
             pass
 
 
@@ -144,9 +337,15 @@ A critical feature of dREL is the ability to index into a different domain and a
 datanames of that domain.  To support this, we have to return a packet which supports
 the 'getattr' method.  The following code is adapted from that found in PyCIFRW. Note
 that in order to further calculate dataname values using the dictionary, each packet 
-stores a link to the full dictionary and the data object. The dictionary ::
+stores a link to the full dictionary and the data object. The dictionary object
+has to be set when the packet is created. ::
 
     class Packet(list):
+        def __init__(self,dictionary,data_source,*args,**kwargs):
+            super(Packet,self).__init__(*args,**kwargs)
+            self.cif_dictionary = dictionary
+            self.fulldata = data_source
+
         def merge_packet(self,incoming):
             """Merge contents of incoming packet with this packet"""
             new_attrs = [a for a in dir(incoming) if a[0] == '_' and a[1] != "_"]
@@ -155,19 +354,24 @@ stores a link to the full dictionary and the data object. The dictionary ::
                 setattr(self,na,getattr(incoming,na))
 
         def __getattr__(self,att_name):
-            """Derive a missing attribute"""
-            if att_name.lower() in self.__dict__:
-                return getattr(self,att_name.lower())
+            """Derive or obtain a packet attribute"""
+            if att_name in self.__dict__:
+                return getattr(self,att_name)
             if att_name in ('cif_dictionary','fulldata','key'):
                 raise AttributeError, 'Programming error: can only assign value of %s' % att_name
             d = self.cif_dictionary
             c = self.fulldata
             k = self.key
-            d.derive_item(att_name,c,store_value=True)
+            if not c.has_key(att_name):
+                print "===Deriving item %s for packet" % att_name
+                d.derive_item(att_name,c,store_value=True)
+                print "===Finished packet derivation for %s" % att_name
             # 
             # now pick out the new value
             keyval = getattr(self,k)
-            full_pack = c.GetKeyedPacket(k,keyval)
+            cat_id = self.cif_dictionary[k]['_name.category_id']
+            all_names = [n for n in self.cif_dictionary.keys() if self.cif_dictionary[n].get('_name.category_id',None) == cat_id]
+            full_pack = c.GetKeyedPacket(k,keyval,all_names)
             return getattr(full_pack,att_name)
 
 Overall control
@@ -176,28 +380,52 @@ Overall control
 This routine is responsible for overall control of the transformation. ::
 
     def manage_transform(name_file,filetype,infile,outtype,outfile,unit_name=None,
-        drel_dict = './mx_def_transforms.dic'):
+        drel_dict = 'demo_translation_0.0.5.dic'):
         """Manage a file type transformation"""
         singlenames,multinames = get_names(name_file)
         all_names = singlenames + multinames
-        def_dic = CifDic(drel_dict,do_dREL=False)
+        def_dic = CifDic(drel_dict,grammar="2.0")
         in_module = transform_table[filetype]
         out_module = transform_table[outtype]
         in_handle = in_module.open_file(infile)
-        in_unit = in_module.open_data_unit(in_handle,entryname=unit_name)
-        out_unit = out_module.create_data_unit()
-        for name,type in all_names:
-            result = transform_table[filetype].get_by_location(in_unit,name,type)
-            if result is None:
-                result = execute_drel(def_dic,in_unit,name)
-            if result is None:
-                pass    # can't be done
-            #now output this value
-            out_module.set_by_location(out_unit,name,result,type)
-        #finish off
-        out_module.close_data_unit(out_unit)
-        out_module.output_file(outfile,[out_unit])
+        in_unit = in_module.open_data_unit(entryname=unit_name)
+        generic = GenericInput(in_module,def_dic)
+        data_unit_spec = out_module.get_single_names()   #defines data unit
+        # leave in datanames that are potentially multi-valued
+        drel_names = [generic.get_drel_name(n) for n in data_unit_spec]
+        name_cats = [def_dic[n]['_name.category_id'] for n in drel_names]
+        cat_type = [def_dic[n].get('_definition.class','Datum') for n in name_cats]
+        were_multi = [n[0] for n in zip(data_unit_spec,cat_type) if n[1] == 'Loop'] 
+        print 'Following names single valued on output: ' + `were_multi`
+        output_schedule = generic.slice_and_dice(were_multi)
+        print 'Generated data entry output schedule: ' + `output_schedule`
+        def write_out_names():
+            for name in all_names:
+                result = generic.get_by_canonical_name(name)
+                if result is None:
+                    print "Skipping %s, not found or derivable from input file" % name   # can't be done
+                else:#now output this value
+                    out_module.set_by_location(name,result,generic.get_type(name))
+
+        if len(output_schedule)>0:
+            [all_names.remove(n) for n in were_multi if n in output_schedule.keys()]  #remove unneeded names
+            for single_data_unit in range(len(output_schedule[output_schedule.keys()[0]])):
+                out_unit = out_module.create_data_unit()
+                filter_names = output_schedule.keys()
+                [generic.add_filter(k,output_schedule[k]) for k in filter_names]
+                for unit_key in output_schedule:
+                    out_module.set_by_location(unit_key,output_schedule[unit_key][single_data_unit],
+                                               generic.get_type(unit_key))
+                write_out_names()
+                out_module.close_data_unit()
+        else:
+            out_module.create_data_unit()
+            write_out_names()
+            out_module.close_data_unit()
+            
+        out_module.output_file(outfile)
         
+
 The dataname bundle
 -------------------
 
@@ -206,29 +434,11 @@ that name takes multiple values, it is prefixed by an asterisk (*).::
 
     def get_names(name_file):
         """Get datanames from the file"""
-        names = open(name_file).readlines()
-        names = [n.split(",") for n in names]
-        multinames = [(n[0][1:],n[1]) for n in names if n[0][0]=="*"]
-        singlenames = [n for n in names if n[0][0]!="*"]
+        names = [n.strip() for n in open(name_file).readlines()]
+        multinames = [n[1:] for n in names if n[0]=="*"]
+        singlenames = [n for n in names if n[0]!="*"]
         return singlenames,multinames
         
-Handling dREL
-=============
-
-We use the pre-existing dREL parser found in later versions of PyCIFRW.  We are
-passed a CifDic object, which contains definition blocks for each canonical name.
-Each definition block may contain a _method.expression text block in the dREL
-language, which we convert to an API-dependent form for execution. ::
-
-    def execute_drel(dictionary, canonical_name, type):
-        """Execute a drel method for deriving the value of canonical name"""
-        if not has_key(dictionary,canonical_name):
-            return None
-        if not has_key(dictionary[canonical_name],'_method.expression'):
-            return None
-        transform_info = dictionary[canonical_name]['_method.expression']
-        
-
 Command-line interface
 ======================
 

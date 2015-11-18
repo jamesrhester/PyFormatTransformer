@@ -82,23 +82,26 @@ structure of an entry in the following table is:
 ::
 
     canonical_name_locations_mx = {
-    "source current": [(("NXsource",),"current",["NXinstrument"],None)],
-    "incident wavelength":[(("NXmonochromator",),"wavelength",["NXinstrument"],None)],
-    "probe":[(("NXsource",),"probe",["NXinstrument"],convert_probe)],
-    "start time": [(("NXentry",),"start_time","to be done",None)],
-    "axis vector":[(("NXtransformations",),"*@vector","to be done",None)],
-    "axis id":[(("NXtransformations",),"*@nxname","to be done",None)],
-    "data axis id":[(("NXdetector","NXdata"),"data@axes",["NXinstrument"],get_axes)],
-    "data":[(("NXdetector","NXdata"),"data",["NXinstrument"],None)],
-    "goniometer axis id":[(("NXsample","NXtransformations"),"*","to be done",None)],
-    "detector axis id":[(("NXdetector","NXtransformation*"),"",["NXinstrument"],None)],
-    "detector axis vector":[(("NXdetector","NXtransformation*"),"@vector",["NXinstrument"],None)]
+    "source current": [(["NXsource"],"current",["NXinstrument"],None)],
+    "incident wavelength":[(["NXmonochromator",],"wavelength",["NXinstrument"],None)],
+    "probe":[(["NXsource"],"probe",["NXinstrument"],convert_probe)],
+    "start time": [(["NXentry"],"start_time","to be done",None)],
+    "axis vector":[(["NXtransformations"],"*@vector","to be done",None)],
+    "axis id":[(["NXtransformations"],"*@nxname","to be done",None)],
+    "data axis id":[(["NXdetector","NXdata"],"data@axes",["NXinstrument"],get_axes)],
+    "full simple data":[(["NXdetector","NXdata"],"data",["NXinstrument"],None)],
+    "goniometer axis id":[(["NXsample","NXtransformation"],"*","to be done",None)],
+    "detector axis id":[(["NXdetector","NXtransformation"],"",["NXinstrument"],None)],
+    "detector axis vector":[(["NXdetector","NXtransformation"],"@vector",["NXinstrument"],None)],
+    "detector axis offset":[(["NXdetector","NXtransformation"],"@offset",["NXinstrument"],None)],
+    "full simple data scan id":[([],"",[],None)]  #entry name
     }
 
 The following groups list canonical names that map from the same domain (domain ID given first). ::
     
-    canonical_groupings_mx = {'wavelength id':['incident wavelength'],
-    'detector axis id':['detector axis vector'],
+    canonical_groupings = {'wavelength id':['incident wavelength'],
+    'detector axis id':['detector axis vector','detector axis offset','detector axis type'],
+    'full simple data scan id':['full simple data']
     }
 
 
@@ -116,10 +119,14 @@ to hide the housekeeping information. ::
             self.filehandle = None
             self.current_entry = None
             self.all_entries = []
-            # housekeeping values
-            self._missing_ids = {}  #waiting for IDs or attributes to be set
-            self._written_list = [] #stuff already output
-            self._id_orders = {} #remember the order of keys
+            # clear housekeeping values
+            self.new_entry()
+
+        def new_entry(self):
+            """Initialise all values"""
+            self._missing_ids = {}   #waiting for IDs or attributes to be set
+            self._written_list = []  #stuff already output
+            self._id_orders = {}     #remember the order of keys
 
 Finding IDs
 -----------
@@ -131,6 +138,7 @@ generate those IDs that are not pre-defined. ::
 
             self.id_equivalents_mx = {
             "wavelength id":"incident_wavelength",
+            "full simple data scan id":"scan id"
             }
   
 Where multiple groups of the same type provide part of the key, we place an
@@ -237,6 +245,18 @@ accordingly. ::
 The API functions
 =================
 
+Data unit specification
+-----------------------
+
+The data unit is described by a list of constant-valued names, or alternatively,
+a list of multiple-valued names.  We go with constant-valued in this example,
+as there are so many multiple-valued names. ::
+
+        def get_single_names(self):
+            """Return a list of canonical ids that may only take a single
+            value in one data unit"""
+            return ["full simple data scan id"]
+
 Obtaining values
 ----------------
 
@@ -291,7 +311,9 @@ values yet, but wait until the ID has been provided. ::
           """Set value of canonical [[name]] in datahandle"""
           location_info = self.name_locations[name]
           # is this an ID item?
+          print 'NX: setting %s (location %s) to %s' % (name,`location_info`,value)
           if name in self.domain_names.keys():
+              print 'NX: setting key value %s' % `name`
               self._id_orders[name] = value
               self.write_with_id(name,location_info,value,value_type)
               self._written_list.append(name)
@@ -340,13 +362,21 @@ Writing a multi-group value
 Some values are spread across multiple groups of the same class, with the index into the value
 then being the group name itself.  A complication here is that the order in which the groups
 are returned may not be the order that they were written in, so we need to access the original
-order provided in [[id_order]] to set the groups correctly. ::
+order provided in [[id_order]] to set the groups correctly.  A special case is the name of
+the top-level group. If location is the empty list, we store the length-one value that is
+provided for when we output the entry. ::
 
         def write_multi_group(self,location,name,values,value_type,id_order=[]):
             """Write values into the groups at location. If name is
             empty, new instances of the last group in the location list are created 
             and named according to the provided values. Otherwise, the
             group names in id_order are accessed and the appropriate values set"""
+            if len(location)==0:
+               print "NX: Setting entry name : given " + `values`
+               if len(values)!= 1:
+                   raise ValueError, "More than one value provided for entry: cannot write multiple entries %s" % `values`
+               self.current_entry.nxname = values[0]
+               return
             current_loc = self._find_group(location[:-1])
             if name == "":
                 for gname in values:
@@ -411,12 +441,12 @@ the order.  This routine also trivially applies to IDs themselves. ::
                 for near_classes,myname,top_classes,dummy in location_info:
                     tc = top_classes[:]
                     tc.extend(near_classes)
-                    if tc[-1][-1]=="*":
-                        tc[-1] = tc[-1][:-1]
+                    if myname == "" or myname.split("@")[0]=="":  # a group
                         if needed_id is not None: 
                             id_order = self._id_orders[needed_id]  #must exist
                         else:
                             id_order = []
+                        print 'NX: setting %s/%s to %s' % (`tc`,`myname`,`values`)
                         self.write_multi_group(tc,myname,values,value_type,id_order)
                     else:
                         target_group = self._find_group(tc)
@@ -443,7 +473,7 @@ We provide routines for opening and closing a file and a data unit. ::
             """Open a
             particular entry .If
             entryname is not provided, the first entry found is
-            used."""  
+            used and a unique name created"""  
             entries = [e for e in nxhandle.NXentry] 
             if entryname is None: 
                 self.current_entry = entries[0]
@@ -457,6 +487,7 @@ We provide routines for opening and closing a file and a data unit. ::
         def create_data_unit(self,entryname = None):
             """Start a new data unit"""
             self.current_entry = nexus.NXentry()
+            self.current_entry.nxname = 'entry' + `len(self.all_entries)+1`
 
 Closing the unit
 ----------------
@@ -469,15 +500,17 @@ sort this out. ::
             """Finish all processing in nxhandle"""
             self.all_entries.append(self.current_entry)
             self.current_entry = None
+            if len(self._missing_ids)>0:
+                raise ValueError, "Invalid data unit written, need " + `self._missing_ids.keys()`
+            self.new_entry()
             return
 
         def output_file(self,filename):
             """Output a file containing the data units in self.all_entries"""
             new_root = nexus.NXroot()
             for one_entry in range(len(self.all_entries)):
-                setattr(new_root,"entry"+`one_entry`,self.all_entries[one_entry])
+                new_root.insert(self.all_entries[one_entry])
             new_root.save(filename)
-        
       
 Example driver
 ==============
