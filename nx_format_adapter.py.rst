@@ -23,9 +23,7 @@ We use the nexusformat library for access, and fixup the library
 to include NXtranformation. ::
   
     from nexusformat import nexus
-    # forward declarations
-    convert_probe = None
-    get_axes = None
+    import numpy  #common form for data manipulation
     # fixup
     missing = "NXtransformation"
     docstring = "NXtransformation class"
@@ -54,56 +52,16 @@ Furthermore, the adapter needs to know where the domain IDs are
 located in order to properly distribute and write values when
 creating a file.  This is provided during initialisation.
 
-Lookup for canonical names
---------------------------
 
-For the canonical name given as a key, provide the class combination,
-name and hierarchy given in the value.  The class combination is a
-list of classes starting from the least deeply nested; in order to be
-considered as part of the dataname, only objects matching the list of
-classes is considered. In most cases only a single class will be
-needed.  We provide a name (which may be blank) if relevant, and
-placement instructions.  Placement describes where in the hierarchy to
-place new objects of this type when constructing files.  Placement is
-not relevant for meaning but is present purely to capture convention.
-The first element of the class combination list should be placed within
-the class at the end of the placement list.  To gather attributes, an
-at sign should be placed at the end of the name and then the attribute.
-An asterisk (*) means that all fields in the group should be considered
-(as for NXtransformations groups). An asterisk at the end of a group
-means that all groups of this type form the values.
-
-Some canonical names represent multiple dependencies.  These are
-indicated by repeating the items above in a list.  Therefore, the total
-structure of an entry in the following table is:
-
-"canonical name": [(class combination 1,name 1, placement 1,[function1]),(class combo 2...)]
-
-::
-
-    canonical_name_locations_mx = {
-    "source current": [(["NXsource"],"current",["NXinstrument"],None)],
-    "incident wavelength":[(["NXmonochromator",],"wavelength",["NXinstrument"],None)],
-    "probe":[(["NXsource"],"probe",["NXinstrument"],convert_probe)],
-    "start time": [(["NXentry"],"start_time","to be done",None)],
-    "axis vector":[(["NXtransformations"],"*@vector","to be done",None)],
-    "axis id":[(["NXtransformations"],"*@nxname","to be done",None)],
-    "data axis id":[(["NXdetector","NXdata"],"data@axes",["NXinstrument"],get_axes)],
-    "full simple data":[(["NXdetector","NXdata"],"data",["NXinstrument"],None)],
-    "goniometer axis id":[(["NXsample","NXtransformation"],"*","to be done",None)],
-    "detector axis id":[(["NXdetector","NXtransformation"],"",["NXinstrument"],None)],
-    "detector axis vector":[(["NXdetector","NXtransformation"],"@vector",["NXinstrument"],None)],
-    "detector axis offset":[(["NXdetector","NXtransformation"],"@offset",["NXinstrument"],None)],
-    "full simple data scan id":[([],"",[],None)]  #entry name
-    }
-
-The following groups list canonical names that map from the same domain (domain ID given first). ::
+The following groups list canonical names that map from the same domain (domain ID given first). In reality,
+it simply defers writing of anything in the value list until the key item has been set, so we can also
+use it to indicate that we have to wait for the data to be set before the data axes can be set. ::
     
     canonical_groupings = {'wavelength id':['incident wavelength'],
     'detector axis id':['detector axis vector','detector axis offset','detector axis type'],
-    'full simple data scan id':['full simple data']
+    'full simple data scan id':['full simple data'],
+    'data axis id':['data axis precedence']
     }
-
 
 
 The Adapter Class
@@ -113,43 +71,102 @@ We modularise the NX adapter to allow reuse with different configurations and
 to hide the housekeeping information. ::
 
     class NXAdapter(object):
-        def __init__(self,location_config,domain_config):
-            self.name_locations = location_config
+        def __init__(self,domain_config):
             self.domain_names = domain_config
             self.filehandle = None
             self.current_entry = None
             self.all_entries = []
+
+Finding IDs
+-----------
+
+Sometimes an ID is implicit, because there is only one of
+something, for example, a single scan.  This list gives
+IDs that are auto-generated and therefore do not have to
+be set separately. They are automatically considered to
+be present when writing out, but can be additionally
+"set" (which may or may not do anything). ::
+
+            self.id_equivalents = [
+            "wavelength id",   #in NeXus appears implicit
+            "full simple data scan id" #singleton ID
+            ]
+
             # clear housekeeping values
             self.new_entry()
+
+
+Specific writing orders
+-----------------------
+
+If we are writing an attribute, we need the thing that it is an attribute of
+to be written first.  Each entry in this dict is a canonical name: the value is
+a list of canonical names that can only be written after the key name.  We augment
+this list with the domain keys as well, but remove any that are auto-generated. ::
+
+            self.write_orders = {'full simple data':['data axis precedence','data axis id'],}
+            self.write_orders.update(self.domain_names)
+            for idname in self.id_equivalents:
+                if self.write_orders.has_key(idname):
+                    del self.write_orders[idname]
+
+Lookup for canonical names
+--------------------------
+
+We endeavour to provide a uniform way of describing how values are
+located and set.  In order to do this we provide,
+for the canonical name given as a key, the class combination,
+name and hierarchical location.  The class combination is a
+list of classes starting from the least deeply nested; in order to be
+considered as part of the dataname, only objects matching the list of
+classes is considered. In most cases only a single class will be
+needed.  We provide a name (which may be blank) if relevant, and
+placement instructions.  Placement describes where in the hierarchy to
+place new objects of this type when constructing files.  Placement is
+not relevant for meaning but is present purely to capture convention.
+The first element of the class combination list should be placed within
+the class at the end of the placement list.  To gather attributes, an
+at sign should be placed after the name, followed by the attribute.
+An asterisk (*) means that all fields in the group should be considered
+(as for NXtransformations groups).  An empty name means that the values
+are those of the group name itself.  
+
+Following these location descriptions we have two functions that are
+applied to values before output, and after input, to allow transformations. If
+the function returns None, nothing is output. This is useful in cases where
+the value is encoded within another value elsewhere.
+
+The order is therefore:
+
+"canonical name": (class combination,name, placement,read_function,write_function)
+
+::
+
+            self.name_locations = {
+            "source current": (["NXsource"],"current",["NXinstrument"],None,None),
+            "incident wavelength":(["NXmonochromator",],"wavelength",["NXinstrument"],None,None),
+            "wavelength id":(["NXmonochromator"],"wavelength",["NXinstrument"],self.make_id,None),
+            "probe":(["NXsource"],"probe",["NXinstrument"],self.convert_probe,None),
+            "start time": ([],"@start_time","to be done",None),
+            "axis vector":(["NXtransformation"],"@vector",[],None,None),
+            "axis id":(["NXtransformation"],"",[],None,None),
+            "data axis id":(["NXdetector","NXdata"],"data@axes",["NXinstrument"],self.get_axes,self.set_axes),
+            "data axis precedence":(["NXdetector","NXdata"],"data@axes",["NXinstrument"],self.get_axis_order,self.create_axes,),
+            "full simple data":(["NXdetector","NXdata"],"data",["NXinstrument"],None,None),
+            "goniometer axis id":(["NXsample","NXtransformation"],"",[],None,None),
+            "detector axis id":(["NXdetector","NXtransformation"],"",["NXinstrument"],None,None),
+            "detector axis vector":(["NXdetector","NXtransformation"],"@vector",["NXinstrument"],None,None),
+            "detector axis offset":(["NXdetector","NXtransformation"],"@offset",["NXinstrument"],None,None),
+            "full simple data scan id":([],"",[],None,None)  #entry name
+            }
 
         def new_entry(self):
             """Initialise all values"""
             self._missing_ids = {}   #waiting for IDs or attributes to be set
             self._written_list = []  #stuff already output
             self._id_orders = {}     #remember the order of keys
+            self._stored = {}        #temporary storage of names
 
-Finding IDs
------------
-
-Unique identifiers for objects can sometimes be implicit, either because
-one or more datanames are expected to be unique and act as a proxy, or
-because position in an array is sufficient.  This table explains how to
-generate those IDs that are not pre-defined. ::
-
-            self.id_equivalents_mx = {
-            "wavelength id":"incident_wavelength",
-            "full simple data scan id":"scan id"
-            }
-  
-Where multiple groups of the same type provide part of the key, we place an
-entry into this table. ::
-
-            self.id_is_group = {
-            }
-
-IDs that are just other names in the same group are listed here. ::
-
-            self.plain_ids = []
 
 Obtaining values
 ================
@@ -176,60 +193,115 @@ of all the groups provided::
            if name == "_parent":    #record the parent
                return [s.nxgroup.nxpath for s in classlist]
            fields = name.split("@")
-           field = fields[0]
-           if len(fields) == 2:
+           prop = fields[0]
+           is_attr = (len(fields) == 2)
+           is_property_attr = (is_attr and prop !="")
+           is_group = (prop == "")
+           if is_attr:
                attr = fields[1]
+           if not is_group:
+               allvalues = [getattr(c,prop) for c in classlist]
            else:
-               attr = ""
-           if field != "" and field != "*":
-               allnames = [getattr(c,field) for c in classlist if hasattr(c,field)]
-               simpledata = [s for s in allnames if s.nxclass in ["NXfield","NXlink"]]
-           elif field == "*":
-               simpledata = [s.nxname for s in classlist]
+               allvalues = classlist
+           if not is_attr:
+               if not is_group:
+                   return allvalues
+               else:
+                   return [s.nxname for s in allvalues]
            else:
-               simpledata = classlist
-           if len(simpledata) != 0 and attr == "":
-               return simpledata
-           elif attr != "":
-               simpledata = [getattr(s,attr) for s in simpledata if hasattr(s,attr)]
-               return simpledata
-           groupdata = [s for s in allnames if s.nxclass not in ["NXfield","NXlink"]]
-           return [s.nxpath for s in groupdata]
+               print 'NX: retrieving %s attribute (prop was %s)' % (attr,prop)
+               allvalues = [getattr(s,attr) for s in allvalues]  #attribute must exist
+               print 'NX: found ' + `allvalues`
+               return allvalues
 
 Conversion functions
 ====================
 
-These functions extract information that is encoded within values instead of having
-a name or group-level address. ::
+These functions extract and set information that is encoded within values instead of having
+a name or group-level address.  They are passed a list, which in this case is a single-
+element list as there is only a single array of data. ::
 
         def get_axes(self,axes_string):
             """Extract the axis names for the array data"""
-            indi_axes = axes_string.split(":")
-            return indi_axes
+            indi_axes = axes_string[0].split(":")
+            return numpy.array(indi_axes)
 
-        def get_axis_order(self,axis_name):
+        def get_axis_order(self,axes_string):
             """Return the axis precedence for the array data"""
-            return axis_string.split(":").index(axis_name)
+            axes = self.get_axes(axes_string)
+            return numpy.arange(1,len(axes)+1)
     
+
+Setting axes
+------------
+
+The axes for a datablock are stored as attributes of that block, with the order of appearance
+of the axis corresponding to its precedence.  Therefore, we cannot output the axis id until we
+have the precedence, so we simply store the IDs.  As writing of precedence must wait until
+we have the IDs, we can skip checking that the axis IDs are present. ::
+
+        def set_axes(self,axis_list):
+            """Remember the data axis ids"""
+            self.data_axis_ids = axis_list
+            return None  #do not write this ever
+    
+        def create_axes(self,axis_order):
+            """Create and set the axis specification string"""
+            axes_in_order = range(len(axis_order))
+            for axis,axis_pos in zip(self.data_axis_ids,axis_order):
+                axes_in_order[axis_pos-1] = axis
+            axis_string = ""
+            for axis in axes_in_order:
+                axis_string = axis_string + axis + ":"
+            print 'NX: Created axis string ' + `axis_string[:-1]`
+            return axis_string[:-1]
+
+Synthesizing IDs
+----------------
+
+Some ID values are implicit, e.g. the wavelength can be identified only by
+the number itself or the position in the list.  When asked for an ID we
+return the order in the list.  This only works because nothing else
+in the file refers to the wavelength. ::
+
+        def make_id(self,value_list):
+            """Synthesize an ID"""
+            return range(len(value_list))
+
+Converting fixed lists
+----------------------
+
+When values are drawn from a fixed set of strings, we may need to convert between
+those strings. ::
+
+        def convert_probe(self,values):
+            """Convert the xray/neutron/gamma keywords"""
+            return values
+
 Checking types
 ==============
 
 We assume our ontology knows about "Real", "Int" and "Text", and check/transform
-accordingly. ::
+accordingly. Everything should be an array. ::
 
         def check_type(self,incoming,target_type):
             """Make sure that [[incoming]] has values of type [[target_type]]"""
             try:
                 incoming_type = incoming.dtype.kind
-                incoming_data = incoming.nxdata
+                if hasattr(incoming,'nxdata'):
+                    incoming_data = incoming.nxdata
+                else:
+                    incoming_data = incoming
             except AttributeError:  #not a dataset, must be an attribute
                 incoming_data = incoming
                 if isinstance(incoming,basestring):
                     incoming_type = 'S'
-                if isinstance(incoming,(int)):
+                elif isinstance(incoming,(int)):
                     incoming_type = 'i'
-                if isinstance(incoming,(float)):
+                elif isinstance(incoming,(float)):
                     incoming_type = 'f'
+                else:
+                    raise ValueError, 'Unrecognised type for ' + `incoming`
             if target_type == "Real":
                 if incoming_type not in 'fiu':
                     raise ValueError, "Real type has actual type %s" % incoming_type
@@ -269,71 +341,68 @@ or an attribute.::
           nxlocation = self.name_locations.get(name,None)
           if nxlocation is None:
               return None
-          for nxclassloc,property,dummy,convert_function in nxlocation:
-              upper_classes = list(nxclassloc)
-              is_group_name = (upper_classes[-1][-1] == "*")
-              if is_group_name:
-                  upper_classes[-1] == upper_classes[-1][:-1]
-              new_classes = self.get_by_class(upper_classes.pop())
-              while len(new_classes)>0 and len(upper_classes)>0:
-                  target_class = upper_classes.pop()
-                  new_classes = [a for a in new_classes if self.is_parent(a,target_class)]
-                  if len(new_classes)==0:
-                      return []   
-              #flatten
-              flat_classes = []
-              [flat_classes.append(a) for a in new_classes if len(a)>0]
-          if not is_group_name:
-              all_names = self.get_by_name(flat_classes,property)
-          else:
-              all_names = [a.nxname for a in flat_classes]
-          if len(all_names)==0:
-              return []
+          nxclassloc,property,dummy,convert_function,dummy = nxlocation
+          upper_classes = list(nxclassloc)
+          new_classes = self.get_by_class(upper_classes.pop())
+          while len(new_classes)>0 and len(upper_classes)>0:
+              target_class = upper_classes.pop()
+              new_classes = [a for a in new_classes if self.is_parent(a,target_class)]
+              if len(new_classes)==0:
+                  return []   
+          all_values = self.get_by_name(new_classes,property)
+          print 'NX: for %s obtained %s ' % (name,`all_values`)
           if convert_function is not None:
-              all_names = map(convert_function,all_names)
-          if len(flat_classes)==1:   #only one value
-              return self.check_type(all_names[0],value_type)
-          else:   #stuff is spread out
-              final_list = []
-              [final_list.append(a) for a in all_names]
-              return map(self.check_type,final_list)
+              all_values = convert_function(all_values)  #
+              print 'NX: converted %s using %s to get %s' % (name,`convert_function`,`all_values`)
+          return numpy.atleast_1d(map(lambda a:self.check_type(a,value_type),all_values))
 
 Setting values
 --------------
 
-To provide maximum flexibility, we allow non-ID values to be set before the
-actual domain ID.  In more complex situations (e.g. a value spread across
-several groups) this may mean that we don't know how to partition the
-values that we have been provided, so in this case we do not write the
-values yet, but wait until the ID has been provided. ::
+We first check that this value is not waiting on any unwritten values.  If so, we simply
+add this value to our waiting list.  If we can write the value, we find its corresponding
+ID and write the value (the ID is necessary to get the order right), then we check to see 
+if we have now made other values writeable and call ourselves recursively.  ::
 
         def set_by_location(self,name,value,value_type,domain=None):
           """Set value of canonical [[name]] in datahandle"""
-          location_info = self.name_locations[name]
-          # is this an ID item?
-          print 'NX: setting %s (location %s) to %s' % (name,`location_info`,value)
-          if name in self.domain_names.keys():
-              print 'NX: setting key value %s' % `name`
-              self._id_orders[name] = value
-              self.write_with_id(name,location_info,value,value_type)
-              self._written_list.append(name)
-              waiting_values = [(n[0],n[1][1],n[1][2]) for n in self._missing_ids.items() if n[1][0] == name]
-              for one_name,one_values,one_type in waiting_values:
-                  self.set_by_location(one_name,one_values,one_type)
-                  return
-          # else get key name corresponding to this name
-          needed_id = [k for k in self.domain_names.keys() if name in self.domain_names[k]]
-          if len(needed_id)>0: 
-              needed_id = needed_id[0]
+          # drop any synthesized IDs on the floor
+          if name in self.id_equivalents:
+              return   #done
+          # check our write order list
+          wait_names = set([k for k in self.write_orders.keys() if name in self.write_orders[k]])
+          waiting = wait_names.difference(self._written_list)
+          if len(waiting)>0:
+              self._missing_ids[name] = self._missing_ids.get(name,set()) | waiting
+              print 'Updated missing ids: ' + `self._missing_ids` + ' waiting on ' + `waiting`
+              self._stored[name] = (value,value_type)
           else:
-              needed_id = None
-          if needed_id is None or needed_id in self._written_list or needed_id in self.id_equivalents_mx.keys():
-              self.write_with_id(needed_id,location_info,value,value_type)
-              self._written_list.append(name)
-          else:
-              self._missing_ids.update({name:[needed_id,value,value_type]})
-              print 'Updated missing ids: ' + `self._missing_ids` + ' waiting on ' + `needed_id`
-          return
+              # we can write this
+              self.store_a_value(name,value,value_type)
+
+        def store_a_value(self,name,value,value_type):
+            """This is called when we can directly output a name"""
+            location_info = self.name_locations[name]
+            print 'NX: setting %s (location %s) to %s' % (name,`location_info`,value)
+            if name in self.domain_names.keys():
+                print 'NX: setting key value %s' % `name`
+                self._id_orders[name] = value
+                self.write_with_id(name,location_info,value,value_type)
+                self._written_list.append(name)
+            else:
+              # else get key name corresponding to this name
+              needed_id = [k for k in self.domain_names.keys() if name in self.domain_names[k]]
+              if len(needed_id)>0: 
+                  needed_id = needed_id[0]
+              else:
+                  needed_id = None
+              if needed_id is None or needed_id in self._written_list or needed_id in self.id_equivalents:
+                  self.write_with_id(needed_id,location_info,value,value_type)
+                  self._written_list.append(name)
+              else:
+                  print 'NX: about to abort, missing list is ' + `self._missing_ids`
+                  raise ValueError, '%s missing for writing %s but %s is not in missing list: ' % (needed_id,name,needed_id)
+
 
 Writing a simple value
 ----------------------
@@ -342,7 +411,7 @@ This sets a property or attribute value. [[current_loc]] is an NXgroup;
 [[name]] is an HDF5 property or attribute (prefixed by @
 sign).  ::
 
-        def write_a_value(self,current_loc,name,value):
+        def write_a_value(self,current_loc,name,value,value_type):
             """Write a value to the group"""
             # now we've worked our way down to the actual name
             if '@' not in name:
@@ -350,7 +419,9 @@ sign).  ::
             else:
                 base,attribute = name.split('@')
                 if base != '' and not current_loc.has_key(base):
-                    self._missing_ids.update({name:[base,value,value_type]})
+                    print 'Not writing attribute %s as field %s missing; assume this is\
+                    scheduled in self._missing_ids' % (attribute,base)
+                    pass
                 elif base == '':  #group attribute
                     current_loc.attrs[attribute] = value
                 else:
@@ -390,7 +461,7 @@ provided for when we output the entry. ::
                 found = [g for g in target_groups if g.nxname == id_name]
                 if len(found)>1 or len(found)==0:
                     raise ValueError, 'Cannot find group with name %s' % id_name
-                self.write_a_value(found[0],name,new_value)
+                self.write_a_value(found[0],name,new_value,value_type)
                 
             
 Utility routine to select/create a group
@@ -408,7 +479,6 @@ Utility routine to select/create a group
                 if len(candidates)==1:
                      current_loc = candidates[0]
                 else:
-                     print 'Location: ' + `location`
                      new_group = getattr(nexus,nxtype)()
                      current_loc[nxtype[2:]]= new_group
                      current_loc = new_group
@@ -435,22 +505,24 @@ the order.  This routine also trivially applies to IDs themselves. ::
         def write_with_id(self,needed_id,location_info,values,value_type):
             """Write a value where the ID is present already"""
             # depends on type of ID
-            if needed_id is None or needed_id in self.id_equivalents_mx.keys() or \
-                needed_id in self.plain_ids or \
+            if needed_id is None or needed_id in self.id_equivalents or \
                 needed_id in self.domain_names.keys():   #all done already
-                for near_classes,myname,top_classes,dummy in location_info:
-                    tc = top_classes[:]
-                    tc.extend(near_classes)
-                    if myname == "" or myname.split("@")[0]=="":  # a group
-                        if needed_id is not None: 
-                            id_order = self._id_orders[needed_id]  #must exist
-                        else:
-                            id_order = []
-                        print 'NX: setting %s/%s to %s' % (`tc`,`myname`,`values`)
-                        self.write_multi_group(tc,myname,values,value_type,id_order)
+                near_classes,myname,top_classes,dummy,set_transform = location_info
+                if set_transform is not None:
+                    values = set_transform(values)
+                    if values is None: return   #nothing to do
+                tc = top_classes[:]
+                tc.extend(near_classes)
+                if myname == "" or myname.split("@")[0]=="":  # a group
+                    if needed_id is not None: 
+                        id_order = self._id_orders[needed_id]  #must exist
                     else:
-                        target_group = self._find_group(tc)
-                        self.write_a_value(target_group,myname,values)
+                        id_order = []
+                    print 'NX: setting %s/%s to %s' % (`tc`,`myname`,`values`)
+                    self.write_multi_group(tc,myname,values,value_type,id_order)
+                else:
+                    target_group = self._find_group(tc)
+                    self.write_a_value(target_group,myname,values,value_type)
             else:
                 raise ValueError, 'Not yet able to handle non-simple IDs: %s' % needed_id
             
@@ -474,7 +546,7 @@ We provide routines for opening and closing a file and a data unit. ::
             particular entry .If
             entryname is not provided, the first entry found is
             used and a unique name created"""  
-            entries = [e for e in nxhandle.NXentry] 
+            entries = [e for e in self.filehandle.NXentry] 
             if entryname is None: 
                 self.current_entry = entries[0]
             else: 
@@ -492,16 +564,29 @@ We provide routines for opening and closing a file and a data unit. ::
 Closing the unit
 ----------------
 
-Axes cannot be written until we have both the ID and the equipment specified, as
-the location depends on the equipment.  We are forced to wait until the end to
-sort this out. ::
+Our missing_ids list contains a list of [old_name, wait_name] where old_name is waiting
+for wait_name.  We resolve all of these at the end, and throw an error as soon as we
+cannot find the values in self._stored. ::
 
         def close_data_unit(self):
-            """Finish all processing in nxhandle"""
+            """Finish all processing"""
+            print 'NX: Now outputing delayed items: missing list, written list:'
+            print `self._missing_ids`
+            print `self._written_list`
+            # create a list indexed by the item we want to write, listing what it was waiting for
+            can_write = [n[0] for n in self._missing_ids.items() if n[1].issubset(self._written_list)]
+            while len(can_write)>0:
+                print 'NX: can write ' + `can_write`
+                for one_name in can_write:
+                    one_values,one_type = self._stored[one_name]
+                    self.store_a_value(one_name,one_values,one_type)
+                    del self._missing_ids[one_name]
+                can_write = [n[0] for n in self._missing_ids.items() if n[1].issubset(self._written_list)]
+            
             self.all_entries.append(self.current_entry)
             self.current_entry = None
             if len(self._missing_ids)>0:
-                raise ValueError, "Invalid data unit written, need " + `self._missing_ids.keys()`
+                raise ValueError, "Invalid data unit written, need " + `self._missing_ids.values()`
             self.new_entry()
             return
 
@@ -518,7 +603,7 @@ Showing how to use these routines. Not functional at present. ::
 
     def process(filename,canonical_name):
         """For demonstration purposes, print out the value of class,name"""
-        nxadapter = NXAdapter(canonical_name_locations_mx,[])
+        nxadapter = NXAdapter([])
         nxadapter.open_file(filename)
         nxadapter.open_data_unit()
         wave_val = nxadapter.get_by_location(canonical_name,'Real')

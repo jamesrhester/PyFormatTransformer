@@ -21,7 +21,7 @@ Data tables
 
 These tables configure the operation of the transformation. ::
 
-    transform_table = {"nexus":nx.NXAdapter(nx.canonical_name_locations_mx,nx.canonical_groupings),
+    transform_table = {"nexus":nx.NXAdapter(nx.canonical_groupings),
                       "cif":cf.CifAdapter(cf.canonical_name_locations,{}),
                       "plain":debug_adapter}
 
@@ -202,10 +202,10 @@ name to the generic equivalent. ::
             "_diffrn_radiation_wavelength.wavelength":"incident wavelength",
             "_diffrn_scan.date_start":"start time",
             "_diffrn_source.current":"source current",
-            "_simple_detector_axis.id":"detector axis id",
-            "_simple_detector_axis.vector":"detector axis vector",
-            "_simple_detector_axis.offset":"detector axis offset",
-            "_simple_detector_axis.type":"detetor axis type",
+            "_simple_array_axis.id":"detector axis id",
+            "_simple_array_axis.vector":"detector axis vector",
+            "_simple_array_axis.offset":"detector axis offset",
+            "_simple_array_axis.type":"detector axis type",
             "_array_structure_list_axis.axis_set_id":"detector axis set id",
             "_array_structure_list_axis.axis_id":"detector axis set component axis",
             "_axis.id":"axis id",
@@ -256,7 +256,10 @@ name to the generic equivalent. ::
             "_diffrn_scan_frame.frame_number":"scan frame sequence number",
             "_array_data.binary_id":"2D data identifier",
             "_array_data.array_id":"2D data structure id",
-            "_array_data.as_integers":"2D data"
+            "_array_data.as_integers":"2D data",
+            "_simple_data_axis.id":"data axis id",
+            "_simple_data_axis.precedence":"data axis precedence",
+            "_simple_data_axis.scan_id":"data axis scan id"
             }
 
 Semantic packets
