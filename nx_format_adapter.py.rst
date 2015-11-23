@@ -58,7 +58,7 @@ it simply defers writing of anything in the value list until the key item has be
 use it to indicate that we have to wait for the data to be set before the data axes can be set. ::
     
     canonical_groupings = {'wavelength id':['incident wavelength'],
-    'detector axis id':['detector axis vector','detector axis offset','detector axis type'],
+    'detector axis id':['detector axis vector mcstas','detector axis offset mcstas','detector axis type'],
     'full simple data scan id':['full simple data'],
     'data axis id':['data axis precedence']
     }
@@ -76,6 +76,7 @@ to hide the housekeeping information. ::
             self.filehandle = None
             self.current_entry = None
             self.all_entries = []
+            self.has_data = [] #do we need to link data when writing
 
 Finding IDs
 -----------
@@ -148,15 +149,15 @@ The order is therefore:
             "wavelength id":(["NXmonochromator"],"wavelength",["NXinstrument"],self.make_id,None),
             "probe":(["NXsource"],"probe",["NXinstrument"],self.convert_probe,None),
             "start time": ([],"@start_time","to be done",None),
-            "axis vector":(["NXtransformation"],"@vector",[],None,None),
+            "axis vector mcstas":(["NXtransformation"],"@vector",[],None,None),
             "axis id":(["NXtransformation"],"",[],None,None),
             "data axis id":(["NXdetector","NXdata"],"data@axes",["NXinstrument"],self.get_axes,self.set_axes),
             "data axis precedence":(["NXdetector","NXdata"],"data@axes",["NXinstrument"],self.get_axis_order,self.create_axes,),
             "full simple data":(["NXdetector","NXdata"],"data",["NXinstrument"],None,None),
             "goniometer axis id":(["NXsample","NXtransformation"],"",[],None,None),
             "detector axis id":(["NXdetector","NXtransformation"],"",["NXinstrument"],None,None),
-            "detector axis vector":(["NXdetector","NXtransformation"],"@vector",["NXinstrument"],None,None),
-            "detector axis offset":(["NXdetector","NXtransformation"],"@offset",["NXinstrument"],None,None),
+            "detector axis vector mcstas":(["NXdetector","NXtransformation"],"@vector",["NXinstrument"],None,None),
+            "detector axis offset mcstas":(["NXdetector","NXtransformation"],"@offset",["NXinstrument"],None,None),
             "full simple data scan id":([],"",[],None,None)  #entry name
             }
 
@@ -573,7 +574,7 @@ cannot find the values in self._stored. ::
             print 'NX: Now outputing delayed items: missing list, written list:'
             print `self._missing_ids`
             print `self._written_list`
-            # create a list indexed by the item we want to write, listing what it was waiting for
+            #recursively find things that we can write
             can_write = [n[0] for n in self._missing_ids.items() if n[1].issubset(self._written_list)]
             while len(can_write)>0:
                 print 'NX: can write ' + `can_write`
@@ -582,7 +583,8 @@ cannot find the values in self._stored. ::
                     self.store_a_value(one_name,one_values,one_type)
                     del self._missing_ids[one_name]
                 can_write = [n[0] for n in self._missing_ids.items() if n[1].issubset(self._written_list)]
-            
+            # TODO:make the data link for NeXus visualisation
+            self.has_data.append('full simple data' in self._written_list)
             self.all_entries.append(self.current_entry)
             self.current_entry = None
             if len(self._missing_ids)>0:
@@ -592,10 +594,17 @@ cannot find the values in self._stored. ::
 
         def output_file(self,filename):
             """Output a file containing the data units in self.all_entries"""
-            new_root = nexus.NXroot()
-            for one_entry in range(len(self.all_entries)):
-                new_root.insert(self.all_entries[one_entry])
-            new_root.save(filename)
+            root = nexus.NXroot()
+            for one_entry,link_data in zip(self.all_entries,self.has_data):
+                root.insert(one_entry)
+                if link_data:
+                    main_data = one_entry.NXinstrument[0].NXdetector[0].data
+                    print 'Found main data at' + `main_data`
+                    data_link = nexus.NXdata()
+                    one_entry.data = data_link
+                    data_link.makelink(main_data)
+                    one_entry.data.nxsignal = one_entry.data.data
+            root.save(filename)
       
 Example driver
 ==============
