@@ -21,7 +21,8 @@ Data tables
 
 These tables configure the operation of the transformation. ::
 
-    transform_table = {"nexus":nx.NXAdapter(nx.canonical_groupings),
+    standard_dimensions = {"length":"m","time":"s","temperature":"K"}
+    transform_table = {"nexus":nx.NXAdapter(nx.canonical_groupings,standard_dimensions),
                       "cif":cf.CifAdapter(cf.canonical_name_locations,{}),
                       "plain":debug_adapter}
 

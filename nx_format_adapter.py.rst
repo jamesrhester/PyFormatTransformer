@@ -71,8 +71,9 @@ We modularise the NX adapter to allow reuse with different configurations and
 to hide the housekeeping information. ::
 
     class NXAdapter(object):
-        def __init__(self,domain_config):
+        def __init__(self,domain_config,dimension_config):
             self.domain_names = domain_config
+            self.dimension_config = dimension_config
             self.filehandle = None
             self.current_entry = None
             self.all_entries = []
@@ -191,8 +192,9 @@ of all the groups provided::
        
         def get_by_name(self,classlist,name):
            """Return all values of name for objects in classlist"""
+           units = None #default value
            if name == "_parent":    #record the parent
-               return [s.nxgroup.nxpath for s in classlist]
+               return [s.nxgroup.nxpath for s in classlist],None
            fields = name.split("@")
            prop = fields[0]
            is_attr = (len(fields) == 2)
@@ -202,18 +204,24 @@ of all the groups provided::
                attr = fields[1]
            if not is_group:
                allvalues = [getattr(c,prop) for c in classlist]
+               try:
+                   units = set([getattr(c,"units") for c in allvalues])
+                   if len(units)>1:
+                       raise ValueError, 'Ambiguous units for %s: %s' % (name,units)
+               except KeyError:
+                   pass
            else:
                allvalues = classlist
            if not is_attr:
                if not is_group:
-                   return allvalues
+                   return allvalues,units
                else:
-                   return [s.nxname for s in allvalues]
+                   return [s.nxname for s in allvalues],None
            else:
                print 'NX: retrieving %s attribute (prop was %s)' % (attr,prop)
                allvalues = [getattr(s,attr) for s in allvalues]  #attribute must exist
                print 'NX: found ' + `allvalues`
-               return allvalues
+               return allvalues,None
 
 Conversion functions
 ====================
@@ -256,6 +264,45 @@ we have the IDs, we can skip checking that the axis IDs are present. ::
                 axis_string = axis_string + axis + ":"
             print 'NX: Created axis string ' + `axis_string[:-1]`
             return axis_string[:-1]
+        
+Managing units
+--------------
+
+Units are obviously better managed using a dedicated Python module. For demonstration
+purposes we use a simple 'a+b*m' conversion table. ::
+
+        def manage_units(self,values,old_units,new_units):
+            """Convert values from old_units to new_units"""
+            if new_units is None or old_units is None:
+                return values
+            import math
+            # This table has a constant unit as the second entry in the 
+            # tuple for each type of dimension to allow interconversion of all units
+            # of that dimension.
+            convert_table = {# length
+                             ("mm","m"):(0,0.001),
+                             ("cm","m"):(0,0.01),
+                             ("km","m"):(0,1000),
+                             # angle
+                             ("radians","degrees"):(0,180/math.pi),
+                             # temperature
+                             ("K","C"):(-273,1)
+                             }
+            if (old_units,new_units) in convert_table.keys():
+                 add_const,mult_const = convert_table[(old_units,new_units)]
+                 return add_const + mult_const*a #assume numpy array
+            elif (new_units,old_units) in convert_table.keys():
+                 sub_const,div_const = convert_table[(new_units,old_units)]
+                 return (a - sub_const)/div_const
+             # else could do a two-stage conversion
+            else:
+                 poss_units = [n[0] for n in convert_table.keys()]
+                 if old_units in poss_units and new_units in poss_units:
+                     common_unit = [n[1] for n in convert_table.keys() if n[0]==old_units][0]
+                     step1 = self.manage_units(values,old_units,common_unit)
+                     return self.manage_units(step1,common_unit,new_units)
+                 else:
+                     raise ValueError, 'Unable to convert between units %s and %s' % (old_units,new_units)
 
 Synthesizing IDs
 ----------------
@@ -283,7 +330,8 @@ Checking types
 ==============
 
 We assume our ontology knows about "Real", "Int" and "Text", and check/transform
-accordingly. Everything should be an array. ::
+accordingly. Everything should be an array. We use the built-in units conversion
+of NeXus to handle unit transformations. ::
 
         def check_type(self,incoming,target_type):
             """Make sure that [[incoming]] has values of type [[target_type]]"""
@@ -335,9 +383,10 @@ Obtaining values
 
 We are provided with a name, and possibly a domain.  The name is of the form
 "class.property", where the property portion could refer to either a property
-or an attribute.::
+or an attribute.  We try to cope with most things through our name_locations
+table::
 
-        def get_by_location(self, name,value_type,domain=None):
+        def get_by_location(self, name,value_type,dimension=None):
           """Return values as [[value_type]] for [[name]]"""
           nxlocation = self.name_locations.get(name,None)
           if nxlocation is None:
@@ -350,22 +399,23 @@ or an attribute.::
               new_classes = [a for a in new_classes if self.is_parent(a,target_class)]
               if len(new_classes)==0:
                   return []   
-          all_values = self.get_by_name(new_classes,property)
-          print 'NX: for %s obtained %s ' % (name,`all_values`)
+          new_units = self.dimension_config.get(dimension,None)
+          all_values,old_units = self.get_by_name(new_classes,property)
+          print 'NX: for %s obtained %s, units %s ' % (name,`all_values`,`old_units`)
           if convert_function is not None:
               all_values = convert_function(all_values)  #
               print 'NX: converted %s using %s to get %s' % (name,`convert_function`,`all_values`)
-          return numpy.atleast_1d(map(lambda a:self.check_type(a,value_type),all_values))
+          before_units = numpy.atleast_1d(map(lambda a:self.check_type(a,value_type),all_values))
+          return self.manage_units(before_units,old_units,new_units)
 
 Setting values
 --------------
 
 We first check that this value is not waiting on any unwritten values.  If so, we simply
 add this value to our waiting list.  If we can write the value, we find its corresponding
-ID and write the value (the ID is necessary to get the order right), then we check to see 
-if we have now made other values writeable and call ourselves recursively.  ::
+ID and write the value (the ID is necessary to get the order right).  ::
 
-        def set_by_location(self,name,value,value_type,domain=None):
+        def set_by_location(self,name,value,value_type,dimension=None):
           """Set value of canonical [[name]] in datahandle"""
           # drop any synthesized IDs on the floor
           if name in self.id_equivalents:
@@ -376,19 +426,20 @@ if we have now made other values writeable and call ourselves recursively.  ::
           if len(waiting)>0:
               self._missing_ids[name] = self._missing_ids.get(name,set()) | waiting
               print 'Updated missing ids: ' + `self._missing_ids` + ' waiting on ' + `waiting`
-              self._stored[name] = (value,value_type)
+              self._stored[name] = (value,value_type,dimension)
           else:
               # we can write this
-              self.store_a_value(name,value,value_type)
+              self.store_a_value(name,value,value_type,dimension)
 
-        def store_a_value(self,name,value,value_type):
+        def store_a_value(self,name,value,value_type,dimension):
             """This is called when we can directly output a name"""
             location_info = self.name_locations[name]
+            units = self.dimension_config.get(dimension,None)
             print 'NX: setting %s (location %s) to %s' % (name,`location_info`,value)
             if name in self.domain_names.keys():
                 print 'NX: setting key value %s' % `name`
                 self._id_orders[name] = value
-                self.write_with_id(name,location_info,value,value_type)
+                self.write_with_id(name,location_info,value,value_type,None)
                 self._written_list.append(name)
             else:
               # else get key name corresponding to this name
@@ -398,7 +449,7 @@ if we have now made other values writeable and call ourselves recursively.  ::
               else:
                   needed_id = None
               if needed_id is None or needed_id in self._written_list or needed_id in self.id_equivalents:
-                  self.write_with_id(needed_id,location_info,value,value_type)
+                  self.write_with_id(needed_id,location_info,value,value_type,units)
                   self._written_list.append(name)
               else:
                   print 'NX: about to abort, missing list is ' + `self._missing_ids`
@@ -412,12 +463,16 @@ This sets a property or attribute value. [[current_loc]] is an NXgroup;
 [[name]] is an HDF5 property or attribute (prefixed by @
 sign).  ::
 
-        def write_a_value(self,current_loc,name,value,value_type):
+        def write_a_value(self,current_loc,name,value,value_type,units):
             """Write a value to the group"""
             # now we've worked our way down to the actual name
             if '@' not in name:
                 current_loc[name] = value
+                if units is not None:
+                    current_loc[name].units = units
             else:
+                if units is not None:
+                    print 'Warning: trying to set units on attribute'
                 base,attribute = name.split('@')
                 if base != '' and not current_loc.has_key(base):
                     print 'Not writing attribute %s as field %s missing; assume this is\
@@ -438,7 +493,7 @@ order provided in [[id_order]] to set the groups correctly.  A special case is t
 the top-level group. If location is the empty list, we store the length-one value that is
 provided for when we output the entry. ::
 
-        def write_multi_group(self,location,name,values,value_type,id_order=[]):
+        def write_multi_group(self,location,name,values,value_type,id_order=[],units=None):
             """Write values into the groups at location. If name is
             empty, new instances of the last group in the location list are created 
             and named according to the provided values. Otherwise, the
@@ -462,7 +517,7 @@ provided for when we output the entry. ::
                 found = [g for g in target_groups if g.nxname == id_name]
                 if len(found)>1 or len(found)==0:
                     raise ValueError, 'Cannot find group with name %s' % id_name
-                self.write_a_value(found[0],name,new_value,value_type)
+                self.write_a_value(found[0],name,new_value,value_type,units)
                 
             
 Utility routine to select/create a group
@@ -503,7 +558,7 @@ Writing an ID value
 When we have an ID stored, we can write out the corresponding values and maintain
 the order.  This routine also trivially applies to IDs themselves. ::
 
-        def write_with_id(self,needed_id,location_info,values,value_type):
+        def write_with_id(self,needed_id,location_info,values,value_type,units):
             """Write a value where the ID is present already"""
             # depends on type of ID
             if needed_id is None or needed_id in self.id_equivalents or \
@@ -520,10 +575,10 @@ the order.  This routine also trivially applies to IDs themselves. ::
                     else:
                         id_order = []
                     print 'NX: setting %s/%s to %s' % (`tc`,`myname`,`values`)
-                    self.write_multi_group(tc,myname,values,value_type,id_order)
+                    self.write_multi_group(tc,myname,values,value_type,id_order,units)
                 else:
                     target_group = self._find_group(tc)
-                    self.write_a_value(target_group,myname,values,value_type)
+                    self.write_a_value(target_group,myname,values,value_type,units)
             else:
                 raise ValueError, 'Not yet able to handle non-simple IDs: %s' % needed_id
             
@@ -579,8 +634,8 @@ cannot find the values in self._stored. ::
             while len(can_write)>0:
                 print 'NX: can write ' + `can_write`
                 for one_name in can_write:
-                    one_values,one_type = self._stored[one_name]
-                    self.store_a_value(one_name,one_values,one_type)
+                    one_values,one_type,dimension = self._stored[one_name]
+                    self.store_a_value(one_name,one_values,one_type,dimension)
                     del self._missing_ids[one_name]
                 can_write = [n[0] for n in self._missing_ids.items() if n[1].issubset(self._written_list)]
             # TODO:make the data link for NeXus visualisation
