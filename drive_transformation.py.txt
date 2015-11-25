@@ -21,8 +21,7 @@ Data tables
 
 These tables configure the operation of the transformation. ::
 
-    standard_dimensions = {"length":"m","time":"s","temperature":"K"}
-    transform_table = {"nexus":nx.NXAdapter(nx.canonical_groupings,standard_dimensions),
+    transform_table = {"nexus":nx.NXAdapter(nx.canonical_groupings),
                       "cif":cf.CifAdapter(cf.canonical_name_locations,{}),
                       "plain":debug_adapter}
 
@@ -62,10 +61,11 @@ dREL methods only operate on those rows that match the criteria.
             if super(GenericInput,self).has_key(name):  #stored already
                 return super(GenericInput,self).__getitem__(name)
             our_type = self.dictionary[name]['_type.contents']
+            our_units = self.dictionary[name].get('_units.code',None)
             generic_name = self.generic_name_table[name]
-            result = self.input_module.get_by_location(generic_name,our_type)
+            result = self.input_module.get_by_location(generic_name,our_type,our_units)
             if len(self.filters)>0:
-                result = self.apply_filters(generic_name,result,our_type)
+                result = self.apply_filters(generic_name,result)
             if result is None and use_drel:  #need to use dREL fu
                 print "=== Deriving %s as not found in datafile" % name
                 result = self.dictionary.derive_item(name,self)
@@ -164,23 +164,27 @@ must be present in the file in order to properly interpret any of these dataname
             print 'Linked to %s: ' % item_name 
             print `linked_items`
 
-        def apply_filters(self,name,result,our_type):
+        def apply_filters(self,name,result):
             """Check all of our filters to see if any match. If so, edit result so
             that only matching entries are returned"""
             if result is None: return result
             drel_name = self.get_drel_name(name)
             drel_cat = self.dictionary[drel_name]['_name.category_id']
             names_in_cat = [n for n in self.dictionary.keys() if self.dictionary[n].get('_name.category_id',"") == drel_cat]
-            intersection = [(self.generic_name_table[n],self.dictionary[n]['_type.contents']) for n in names_in_cat if n in self.generic_name_table.keys() and n in self.filters.keys()]
+            intersection = [(self.generic_name_table[n],
+                             self.dictionary[n]['_type.contents'],
+                             self.dictionary[n].get('_units.code',None))\
+                            for n in names_in_cat if n in self.generic_name_table.keys() and n in self.filters.keys()]
             print 'Intersection: ' + `intersection`
-            actually_there = [n[0] for n in intersection if self.input_module.get_by_location(n[0],n[1]) is not None]
+            actually_there = [n[0] for n in intersection if self.input_module.get_by_location(n[0],n[1],n[2]) is not None]
             # now edit
             print 'Actually there:' + `actually_there`
             accept_list = [True] * len(result)
             for filter_name in actually_there:
                 filter_drel = self.get_drel_name(filter_name)
                 filter_type = self.dictionary[filter_drel]['_type.contents']
-                filter_values = self.input_module.get_by_location(filter_name,filter_type)
+                filter_units = self.dictionary[filter_drel].get('_units.code',None)
+                filter_values = self.input_module.get_by_location(filter_name,filter_type,filter_units)
                 print 'Ready to filter: %s %s, matching %s' % (filter_name,`filter_values`,`self.filters[filter_drel]`)
                 accept_list = [(p[0] and (p[1]==self.filters[filter_drel])) for p in zip(accept_list,filter_values)]
             print 'Filtered on %s, obtained %s for %s' % (actually_there,accept_list,result)

@@ -4,20 +4,17 @@ Introduction
 This is an demonstration NeXus format adapter. Format adapters are
 described in the paper by Hester (2016). They set and return data in a
 uniform (domain,name) presentation.  All format adapter sets must
-choose how values and units are to be presented. Here we choose Numpy
-representation, and standard units of 'metres' for length.  This
+choose how values are to be represented. Here we choose Numpy
+arrays.  This
 adapter is not intended to be comprehensive, but instead to show how a
 full adapter might be written.
 
-Three routines are required:
-1. get_by_location(name,type,domain=None)
+Two core routines are required:
+1. get_by_location(name,type,units)
 Return a numpy array or string corresponding to
-all values associated with name. Type
-is restricted to "real", "text" or "int".
-2. set_by_location(domain,name,values,type)
+all values associated with name, expressed in 'units'. 
+2. set_by_location(domain,name,values,type,units)
 Set all values for (domain,name)
-3. set_by_domain_value(domain,domain_value,name,value,type)
-Set the value of name corresponding to the value of domain equalling (domain,name)
 
 We use the nexusformat library for access, and fixup the library
 to include NXtranformation. ::
@@ -71,9 +68,8 @@ We modularise the NX adapter to allow reuse with different configurations and
 to hide the housekeeping information. ::
 
     class NXAdapter(object):
-        def __init__(self,domain_config,dimension_config):
+        def __init__(self,domain_config):
             self.domain_names = domain_config
-            self.dimension_config = dimension_config
             self.filehandle = None
             self.current_entry = None
             self.all_entries = []
@@ -162,6 +158,27 @@ The order is therefore:
             "full simple data scan id":([],"",[],None,None)  #entry name
             }
 
+Handling units
+--------------
+
+We are passed a units identifier in some standard notation, which may not always match NeXus
+notation. We adopt for convenience the DDLm unit notation, and this table contains any
+translations that are necessary to change between them.  If a unit is missing from this table,
+it is denoted identically in both the DDLm dictionary and NeXus. ::
+
+            self.unit_conversions = {   
+                'metres':     'm',  
+                'centimetres':'cm',  
+                'millimetres':'mm',  
+                'nanometres': 'nm',  
+                'angstroms':  'A' , 
+                'picometres': 'pm',  
+                'femtometres':'fm',
+                'celsius': 'C',
+                'kelvins':'K'
+            }
+
+
         def new_entry(self):
             """Initialise all values"""
             self._missing_ids = {}   #waiting for IDs or attributes to be set
@@ -208,6 +225,7 @@ of all the groups provided::
                    units = set([getattr(c,"units") for c in allvalues])
                    if len(units)>1:
                        raise ValueError, 'Ambiguous units for %s: %s' % (name,units)
+                   units = units.pop()  #single value
                except KeyError:
                    pass
            else:
@@ -273,7 +291,7 @@ purposes we use a simple 'a+b*m' conversion table. ::
 
         def manage_units(self,values,old_units,new_units):
             """Convert values from old_units to new_units"""
-            if new_units is None or old_units is None:
+            if new_units is None or old_units is None or old_units==new_units:
                 return values
             import math
             # This table has a constant unit as the second entry in the 
@@ -283,6 +301,8 @@ purposes we use a simple 'a+b*m' conversion table. ::
                              ("mm","m"):(0,0.001),
                              ("cm","m"):(0,0.01),
                              ("km","m"):(0,1000),
+                             ("pm","m"):(0,1e-9),
+                             ("A","m"):(0,1e-10),
                              # angle
                              ("radians","degrees"):(0,180/math.pi),
                              # temperature
@@ -290,13 +310,14 @@ purposes we use a simple 'a+b*m' conversion table. ::
                              }
             if (old_units,new_units) in convert_table.keys():
                  add_const,mult_const = convert_table[(old_units,new_units)]
-                 return add_const + mult_const*a #assume numpy array
+                 return add_const + mult_const*values #assume numpy array
             elif (new_units,old_units) in convert_table.keys():
                  sub_const,div_const = convert_table[(new_units,old_units)]
-                 return (a - sub_const)/div_const
+                 return (values - sub_const)/div_const
              # else could do a two-stage conversion
             else:
                  poss_units = [n[0] for n in convert_table.keys()]
+                 print 'NX: possible unit conversions: ' + `poss_units`
                  if old_units in poss_units and new_units in poss_units:
                      common_unit = [n[1] for n in convert_table.keys() if n[0]==old_units][0]
                      step1 = self.manage_units(values,old_units,common_unit)
@@ -310,7 +331,8 @@ Synthesizing IDs
 Some ID values are implicit, e.g. the wavelength can be identified only by
 the number itself or the position in the list.  When asked for an ID we
 return the order in the list.  This only works because nothing else
-in the file refers to the wavelength. ::
+in the file refers to the wavelength, so we do not have to make sure our
+fake IDs match. ::
 
         def make_id(self,value_list):
             """Synthesize an ID"""
@@ -386,7 +408,7 @@ We are provided with a name, and possibly a domain.  The name is of the form
 or an attribute.  We try to cope with most things through our name_locations
 table::
 
-        def get_by_location(self, name,value_type,dimension=None):
+        def get_by_location(self, name,value_type,units=None):
           """Return values as [[value_type]] for [[name]]"""
           nxlocation = self.name_locations.get(name,None)
           if nxlocation is None:
@@ -399,14 +421,14 @@ table::
               new_classes = [a for a in new_classes if self.is_parent(a,target_class)]
               if len(new_classes)==0:
                   return []   
-          new_units = self.dimension_config.get(dimension,None)
           all_values,old_units = self.get_by_name(new_classes,property)
           print 'NX: for %s obtained %s, units %s ' % (name,`all_values`,`old_units`)
           if convert_function is not None:
               all_values = convert_function(all_values)  #
               print 'NX: converted %s using %s to get %s' % (name,`convert_function`,`all_values`)
           before_units = numpy.atleast_1d(map(lambda a:self.check_type(a,value_type),all_values))
-          return self.manage_units(before_units,old_units,new_units)
+          unit_abbrev = self.unit_conversions.get(units,units)
+          return self.manage_units(before_units,old_units,unit_abbrev)
 
 Setting values
 --------------
@@ -415,7 +437,7 @@ We first check that this value is not waiting on any unwritten values.  If so, w
 add this value to our waiting list.  If we can write the value, we find its corresponding
 ID and write the value (the ID is necessary to get the order right).  ::
 
-        def set_by_location(self,name,value,value_type,dimension=None):
+        def set_by_location(self,name,value,value_type,units=None):
           """Set value of canonical [[name]] in datahandle"""
           # drop any synthesized IDs on the floor
           if name in self.id_equivalents:
@@ -426,15 +448,14 @@ ID and write the value (the ID is necessary to get the order right).  ::
           if len(waiting)>0:
               self._missing_ids[name] = self._missing_ids.get(name,set()) | waiting
               print 'Updated missing ids: ' + `self._missing_ids` + ' waiting on ' + `waiting`
-              self._stored[name] = (value,value_type,dimension)
+              self._stored[name] = (value,value_type,units)
           else:
               # we can write this
-              self.store_a_value(name,value,value_type,dimension)
+              self.store_a_value(name,value,value_type,units)
 
-        def store_a_value(self,name,value,value_type,dimension):
+        def store_a_value(self,name,value,value_type,units):
             """This is called when we can directly output a name"""
             location_info = self.name_locations[name]
-            units = self.dimension_config.get(dimension,None)
             print 'NX: setting %s (location %s) to %s' % (name,`location_info`,value)
             if name in self.domain_names.keys():
                 print 'NX: setting key value %s' % `name`
@@ -463,15 +484,15 @@ This sets a property or attribute value. [[current_loc]] is an NXgroup;
 [[name]] is an HDF5 property or attribute (prefixed by @
 sign).  ::
 
-        def write_a_value(self,current_loc,name,value,value_type,units):
+        def write_a_value(self,current_loc,name,value,value_type,unit_abbrev):
             """Write a value to the group"""
             # now we've worked our way down to the actual name
             if '@' not in name:
                 current_loc[name] = value
-                if units is not None:
-                    current_loc[name].units = units
+                if unit_abbrev is not None:
+                    current_loc[name].units = unit_abbrev
             else:
-                if units is not None:
+                if unit_abbrev is not None:
                     print 'Warning: trying to set units on attribute'
                 base,attribute = name.split('@')
                 if base != '' and not current_loc.has_key(base):
@@ -560,6 +581,7 @@ the order.  This routine also trivially applies to IDs themselves. ::
 
         def write_with_id(self,needed_id,location_info,values,value_type,units):
             """Write a value where the ID is present already"""
+            unit_abbrev = self.unit_conversions.get(units,units)
             # depends on type of ID
             if needed_id is None or needed_id in self.id_equivalents or \
                 needed_id in self.domain_names.keys():   #all done already
@@ -575,10 +597,10 @@ the order.  This routine also trivially applies to IDs themselves. ::
                     else:
                         id_order = []
                     print 'NX: setting %s/%s to %s' % (`tc`,`myname`,`values`)
-                    self.write_multi_group(tc,myname,values,value_type,id_order,units)
+                    self.write_multi_group(tc,myname,values,value_type,id_order,unit_abbrev)
                 else:
                     target_group = self._find_group(tc)
-                    self.write_a_value(target_group,myname,values,value_type,units)
+                    self.write_a_value(target_group,myname,values,value_type,unit_abbrev)
             else:
                 raise ValueError, 'Not yet able to handle non-simple IDs: %s' % needed_id
             
@@ -634,8 +656,8 @@ cannot find the values in self._stored. ::
             while len(can_write)>0:
                 print 'NX: can write ' + `can_write`
                 for one_name in can_write:
-                    one_values,one_type,dimension = self._stored[one_name]
-                    self.store_a_value(one_name,one_values,one_type,dimension)
+                    one_values,one_type,units = self._stored[one_name]
+                    self.store_a_value(one_name,one_values,one_type,units)
                     del self._missing_ids[one_name]
                 can_write = [n[0] for n in self._missing_ids.items() if n[1].issubset(self._written_list)]
             # TODO:make the data link for NeXus visualisation
