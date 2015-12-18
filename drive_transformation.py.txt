@@ -29,7 +29,7 @@ dREL configuration
 ==================
 
 In order to use our dREL transformer, we must create an object that
-can access our intput file with a Python '__getitem__', 'has_key' and
+can access our input file with a Python '__getitem__', 'has_key' and
 'GetKeyedSemanticPacket' method (see section "Configuration" in
 py_from_ast.nw.).  This object will recursively call itself to access
 any missing data.  We define a class which we initialise with the
@@ -77,8 +77,8 @@ dREL methods only operate on those rows that match the criteria.
             return result
             
         def __setitem__(self,name,value):
-            """Set a value, after checking"""
-            if value is None or None in value:
+            """Set a value, after checking. We do not touch the underlying input file"""
+            if value is None or isinstance(value,list) and None in value:
                 raise ValueError, "Attempt to set None value for %s" % name
             print 'Setting %s to %s' % (name,value)
             super(GenericInput,self).__setitem__(name,value)
@@ -126,7 +126,7 @@ combination of values is given a separate data unit. ::
             multi_vals = {}
             for can_name in data_unit_spec:    #single-valued
                 can_vals = self.get_by_canonical_name(can_name)
-                if can_vals is not None and len(can_vals)>1:
+                if can_vals is not None and len(can_vals)>=1:
                     multi_vals[can_name] = can_vals
             # create a schedule: an array of values taken by each dataname
             schedule = {}
@@ -138,6 +138,32 @@ combination of values is given a separate data unit. ::
                 schedule[one_name] = []
                 [schedule[one_name].extend([p]*old_length) for p in multi_vals[one_name]]
             return schedule
+
+
+Figuring out which names should not be array-valued
+---------------------------------------------------
+
+We take responsibility for supplying the format adapter with a non-list-valued item when
+we have sliced and diced.  We need to check for linked items as well. So we find out the
+category key(s), and see where they are linked to. A key is only single-valued if the key
+that it points to is single-valued, or the key itself is specified as single-valued. It
+is possible for the pointed-to key to be multiple-valued while this category only has
+a single value. Therefore, we  ::
+
+        def find_singleton(self,single_names,one_name):
+            """Using dictionary, return True if one_name must not be multi-valued if items in
+            single_names are single-valued.  Expects canonical names throughout"""
+            drel_single_names = [self.get_drel_name(n) for n in single_names]
+            drel_query_name = self.get_drel_name(one_name)
+            cat_for_name = self.dictionary[drel_query_name]['_name.category_id']
+            keys_for_cat = set(tuple(self.dictionary[cat_for_name].get('_category_key.name',[])))
+            down_linked_items = set([self.dictionary[n]['_definition_id'] for n in self.dictionary.keys() if self.dictionary[n].get('_name.linked_item_id','') in drel_single_names])
+            all_key_names = set(drel_single_names) | down_linked_items
+            print 'Debug: keys for %s ' % one_name
+            print `keys_for_cat`
+            print 'Single-valued keys:' + `all_key_names`
+            must_be_single =  keys_for_cat <= set(all_key_names)
+            return must_be_single
 
 Filters
 -------
@@ -186,7 +212,7 @@ must be present in the file in order to properly interpret any of these dataname
                 filter_units = self.dictionary[filter_drel].get('_units.code',None)
                 filter_values = self.input_module.get_by_location(filter_name,filter_type,filter_units)
                 print 'Ready to filter: %s %s, matching %s' % (filter_name,`filter_values`,`self.filters[filter_drel]`)
-                accept_list = [(p[0] and (p[1]==self.filters[filter_drel])) for p in zip(accept_list,filter_values)]
+                accept_list = [(p[0] and (p[1] in self.filters[filter_drel])) for p in zip(accept_list,filter_values)]
             print 'Filtered on %s, obtained %s for %s' % (actually_there,accept_list,result)
             return [r[0] for r in zip(result,accept_list) if r[1]]
             
@@ -213,6 +239,11 @@ name to the generic equivalent. ::
             "_simple_array_axis.vector_convention2":"detector axis vector mcstas",
             "_simple_array_axis.offset_convention2":"detector axis offset mcstas",
             "_simple_array_axis.type":"detector axis type",
+            "_array_structure_list.id":"unique array direction identifier",
+            "_array_structure_list.array_id":"array structure array identifier",
+            "_array_structure_list.axis_set_id":"array structure axis set",
+            "_array_structure_list.index":"array structure index",
+            "_array_structure_list.precedence":"array axis set precedence",
             "_array_structure_list_axis.axis_set_id":"detector axis set id",
             "_array_structure_list_axis.axis_id":"detector axis set component axis",
             "_axis.id":"axis id",
@@ -232,11 +263,12 @@ name to the generic equivalent. ::
             "_scan_array_data.scan_id":"full simple data scan id",
             "_diffrn_scan.id":"scan id",
             "_diffrn_scan.frames":"number of frames",
+            "_diffrn_scan.number_of_scanned_axes":"number of scanned axes",
             "_diffrn_scan_simple.scan_id":"simple scan data id",
             "_diffrn_scan_simple.axis_id":"simple scan axis",
-            "_diffrn_scan_simple_frames.key":"simple scan frame key",
             "_diffrn_scan_simple_frames.frame_id":"simple scan frame frame id",
             "_diffrn_scan_simple_frames.scan_id":"simple scan frame scan id",
+            "_diffrn_scan_simple_frames.id":"simple scan frame unique identifier",
             "_diffrn_scan_axis.key":"scan axis key",
             "_diffrn_scan_axis.axis_id":"scan axis axis id",
             "_diffrn_scan_axis.scan_id":"scan axis scan id",
@@ -254,11 +286,18 @@ name to the generic equivalent. ::
             "_diffrn_detector.detector":"detector name",
             "_diffrn_detector_element.detector_id":"detector element detector id",
             "_diffrn_detector_element.id":"detector element id",
+            "_diffrn_detector_element.key":"detector element unique identifier",
+            "_diffrn_detector_monolithic_element.key":"monolithic detector element unique identifier",
+            "_diffrn_detector_monolithic.id":"monolithic detector id",
+            "_diffrn_detector.number_of_elements":"number of detector elements",
             "_diffrn_data_frame.id":"data frame id",
+            "_diffrn_data_frame.key":"data frame unique identifier",
             "_diffrn_data_frame.binary_id":"data frame binary id",
             "_diffrn_data_frame.array_id":"data frame array id",
             "_diffrn_data_frame.scan_id":"data frame scan id",
             "_diffrn_data_frame.detector_element_id":"data frame element id",
+            "_diffrn_data_frame.detector_element_key":"data frame detector element key",
+            "_diffrn_data_frame.detector_id":"data frame detector id",
             "_diffrn_scan_frame.key":"scan frame key",
             "_diffrn_scan_frame.scan_id":"scan frame scan id",
             "_diffrn_scan_frame.frame_id":"scan frame frame id",
@@ -392,7 +431,7 @@ Overall control
 This routine is responsible for overall control of the transformation. ::
 
     def manage_transform(name_file,filetype,infile,outtype,outfile,unit_name=None,
-        drel_dict = 'demo_translation_0.0.5.dic'):
+        drel_dict = 'full_demo_0.0.6.dic'):
         """Manage a file type transformation"""
         singlenames,multinames = get_names(name_file)
         all_names = singlenames + multinames
@@ -411,16 +450,21 @@ This routine is responsible for overall control of the transformation. ::
         print 'Following names single valued on output: ' + `were_multi`
         output_schedule = generic.slice_and_dice(were_multi)
         print 'Generated data entry output schedule: ' + `output_schedule`
-        def write_out_names():
+        def write_out_names(single_valued_names):
+            """Output names, with those that are not listed provided in the argument"""
             for name in all_names:
                 result = generic.get_by_canonical_name(name)
                 if result is None:
                     print "Skipping %s, not found or derivable from input file" % name   # can't be done
                 else:#now output this value
+                    if name in single_valued_names:
+                        result = result[0]   #remove one level of listing
                     out_module.set_by_location(name,result,generic.get_type(name))
 
         if len(output_schedule)>0:
             [all_names.remove(n) for n in were_multi if n in output_schedule.keys()]  #remove unneeded names
+            must_be_single = [n for n in all_names if generic.find_singleton(output_schedule.keys(),n)]
+            print 'Single-valued: ' + `must_be_single`
             for single_data_unit in range(len(output_schedule[output_schedule.keys()[0]])):
                 out_unit = out_module.create_data_unit()
                 filter_names = output_schedule.keys()
@@ -428,7 +472,7 @@ This routine is responsible for overall control of the transformation. ::
                 for unit_key in output_schedule:
                     out_module.set_by_location(unit_key,output_schedule[unit_key][single_data_unit],
                                                generic.get_type(unit_key))
-                write_out_names()
+                write_out_names(must_be_single)
                 out_module.close_data_unit()
         else:
             out_module.create_data_unit()
@@ -450,6 +494,7 @@ that name takes multiple values, it is prefixed by an asterisk (*).::
         multinames = [n[1:] for n in names if n[0]=="*"]
         singlenames = [n for n in names if n[0]!="*"]
         return singlenames,multinames
+        
         
 Command-line interface
 ======================

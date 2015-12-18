@@ -73,6 +73,8 @@ value has to be converted (units, list of restricted values, array creation)::
     "data frame array id":["_diffrn_data_frame.array_id",None],
     "data frame scan id":["_diffrn_data_frame.scan_id",None],
     "data frame element id":["_diffrn_data_frame.detector_element_id",None],
+    "data frame detector id":["_diffrn_data_frame.detector_id",None],
+    "data frame detector element key":['_diffrn_data_frame.detector_element_key',None],
     "scan frame key":["_diffrn_scan_frame.key",None],
     "scan frame scan id":["_diffrn_scan_frame.scan_id",None],
     "scan frame frame id":["_diffrn_scan_frame.frame_id",None],
@@ -80,7 +82,14 @@ value has to be converted (units, list of restricted values, array creation)::
     "simple scan frame key":["_diffrn_scan_simple_frame.key",None],
     "2D data identifier":["_array_data.binary_id",None],
     "2D data structure id":["_array_data.array_id",None],
-    "2D data":["_array_data.as_integers",None]
+    "2D data":["_array_data.as_integers",None],
+    "array structure array identifier":["_array_structure_list.array_id",None],
+    "unique array direction identifier":["_array_structure_list.id",None],
+    "array axis set precedence":["_array_structure_list.precedence",None],
+    "array structure index":["_array_structure_list.index",None],
+    "array structure axis set":["_array_structure_list.axis_set_id",None],
+    "detector axis set id":["_array_structure_list_axis.axis_set_id",None],
+    "detector axis set component axis":["_array_structure_list_axis.axis_id",None]
     }
 
 The adapter class
@@ -154,7 +163,7 @@ file every time. ::
             else:
                 cif_location,transform = self.name_locations.get(name,(None,None))
                 if cif_location is None:
-                    print "Debug: no location found for %s" % name
+                    print "CIF: no location found for %s" % name
                     return None
                 try:
                     values = self.cifblock[cif_location]
