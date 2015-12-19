@@ -21,9 +21,9 @@ Data tables
 
 These tables configure the operation of the transformation. ::
 
-    transform_table = {"nexus":nx.NXAdapter(nx.canonical_groupings),
-                      "cif":cf.CifAdapter(cf.canonical_name_locations,{}),
-                      "plain":debug_adapter}
+    transform_table = {"nexus":(nx.NXAdapter,(nx.canonical_groupings,)),
+                      "cif":(cf.CifAdapter,(cf.canonical_name_locations,{})),
+                      "plain":(debug_adapter,())}
 
 dREL configuration
 ==================
@@ -436,8 +436,8 @@ This routine is responsible for overall control of the transformation. ::
         singlenames,multinames = get_names(name_file)
         all_names = singlenames + multinames
         def_dic = CifDic(drel_dict,grammar="2.0")
-        in_module = transform_table[filetype]
-        out_module = transform_table[outtype]
+        in_module = apply(transform_table[filetype][0],transform_table[filetype][1])
+        out_module = apply(transform_table[outtype][0],transform_table[outtype][1])
         in_handle = in_module.open_file(infile)
         in_unit = in_module.open_data_unit(entryname=unit_name)
         generic = GenericInput(in_module,def_dic)
@@ -462,7 +462,7 @@ This routine is responsible for overall control of the transformation. ::
                     out_module.set_by_location(name,result,generic.get_type(name))
 
         if len(output_schedule)>0:
-            [all_names.remove(n) for n in were_multi if n in output_schedule.keys()]  #remove unneeded names
+            [all_names.remove(n) for n in were_multi if n in output_schedule.keys() and n in all_names]  #remove unneeded names
             must_be_single = [n for n in all_names if generic.find_singleton(output_schedule.keys(),n)]
             print 'Single-valued: ' + `must_be_single`
             for single_data_unit in range(len(output_schedule[output_schedule.keys()[0]])):
