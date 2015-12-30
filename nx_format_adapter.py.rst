@@ -147,6 +147,7 @@ The order is therefore:
             "probe":(["NXsource"],"probe",["NXinstrument"],self.convert_probe,None),
             "start time": ([],"@start_time","to be done",None),
             "axis vector mcstas":(["NXtransformation"],"@vector",[],None,None),
+            "axis offset mcstas":(["NXtransformation"],"@offset",[],None,None),
             "axis id":(["NXtransformation"],"",[],None,None),
             "data axis id":(["NXdetector","NXdata"],"data@axes",["NXinstrument"],self.get_axes,self.set_axes),
             "data axis precedence":(["NXdetector","NXdata"],"data@axes",["NXinstrument"],self.get_axis_order,self.create_axes,),
@@ -342,7 +343,7 @@ Converting fixed lists
 ----------------------
 
 When values are drawn from a fixed set of strings, we may need to convert between
-those strings. ::
+those strings. This is currently not implemented. ::
 
         def convert_probe(self,values):
             """Convert the xray/neutron/gamma keywords"""
@@ -414,13 +415,17 @@ table::
           if nxlocation is None:
               return None
           nxclassloc,property,dummy,convert_function,dummy = nxlocation
-          upper_classes = list(nxclassloc)
-          new_classes = self.get_by_class(upper_classes.pop())
-          while len(new_classes)>0 and len(upper_classes)>0:
-              target_class = upper_classes.pop()
-              new_classes = [a for a in new_classes if self.is_parent(a,target_class)]
-              if len(new_classes)==0:
-                  return []   
+          # catch the reference to the entry name itself
+          if len(nxclassloc) == 0:
+              new_classes = [self.current_entry]
+          else:
+              upper_classes = list(nxclassloc)
+              new_classes = self.get_by_class(upper_classes.pop())
+              while len(new_classes)>0 and len(upper_classes)>0:
+                  target_class = upper_classes.pop()
+                  new_classes = [a for a in new_classes if self.is_parent(a,target_class)]
+                  if len(new_classes)==0:
+                      return []   
           all_values,old_units = self.get_by_name(new_classes,property)
           print 'NX: for %s obtained %s, units %s ' % (name,`all_values`,`old_units`)
           if convert_function is not None:

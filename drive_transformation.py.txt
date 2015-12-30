@@ -22,7 +22,7 @@ Data tables
 These tables configure the operation of the transformation. ::
 
     transform_table = {"nexus":(nx.NXAdapter,(nx.canonical_groupings,)),
-                      "cif":(cf.CifAdapter,(cf.canonical_name_locations,{})),
+                      "cif":(cf.CifAdapter,(cf.canonical_name_locations,cf.canonical_groupings)),
                       "plain":(debug_adapter,())}
 
 dREL configuration
@@ -59,6 +59,7 @@ dREL methods only operate on those rows that match the criteria.
             """Return an item as standard type"""
             print 'DEBUG: Accessing %s' % name
             if super(GenericInput,self).has_key(name):  #stored already
+                print 'Providing cached value for %s' % (name)
                 return super(GenericInput,self).__getitem__(name)
             our_type = self.dictionary[name]['_type.contents']
             our_units = self.dictionary[name].get('_units.code',None)
@@ -68,19 +69,24 @@ dREL methods only operate on those rows that match the criteria.
                 result = self.apply_filters(generic_name,result)
             if result is None and use_drel:  #need to use dREL fu
                 print "=== Deriving %s as not found in datafile" % name
-                result = self.dictionary.derive_item(name,self)
-                if result is not None:
+                result = self.dictionary.derive_item(name,self,allow_defaults=False)
+                if result is None:
+                    result = self.dictionary.derive_item(name,self,allow_defaults=True)
+                if result is not None and not (isinstance(result,list) and None in result):
                     self[name] = result
                     print "===Successfully derived %s = %s" % (name,result)
                 else:
-                    print 'Warning: derivation of %n failed'
+                    print 'Warning: derivation of %s failed' % name
             return result
             
         def __setitem__(self,name,value):
             """Set a value, after checking. We do not touch the underlying input file"""
             if value is None or isinstance(value,list) and None in value:
                 raise ValueError, "Attempt to set None value for %s" % name
-            print 'Setting %s to %s' % (name,value)
+            if not hasattr(value,'__iter__'):
+                print 'Setting %s to %s' % (name,value)
+            else:
+                print 'Setting %s to list' % name
             super(GenericInput,self).__setitem__(name,value)
 
         def has_key(self,name):
@@ -231,6 +237,7 @@ name to the generic equivalent. ::
             """Install a name translation dictionary"""
             self.generic_name_table = {
             "_diffrn_radiation_wavelength.wavelength":"incident wavelength",
+            "_diffrn_radiation_wavelength.id":"wavelength id",
             "_diffrn_scan.date_start":"start time",
             "_diffrn_source.current":"source current",
             "_simple_array_axis.id":"detector axis id",
@@ -415,7 +422,9 @@ has to be set when the packet is created. ::
             k = self.key
             if not c.has_key(att_name):
                 print "===Deriving item %s for packet" % att_name
-                d.derive_item(att_name,c,store_value=True)
+                result = d.derive_item(att_name,c,store_value=True,allow_defaults=False)
+                if result is None:   #try with defaults
+                    d.derive_item(att_name,c,store_value=True,allow_defaults=True)
                 print "===Finished packet derivation for %s" % att_name
             # 
             # now pick out the new value
@@ -476,7 +485,7 @@ This routine is responsible for overall control of the transformation. ::
                 out_module.close_data_unit()
         else:
             out_module.create_data_unit()
-            write_out_names()
+            write_out_names([])
             out_module.close_data_unit()
             
         out_module.output_file(outfile)
