@@ -36,35 +36,36 @@ loop_
          SCAN1     DETECTOR_X          0.00      0.00      0.00      0.00      0.00     0.00     
          SCAN1     DETECTOR_PITCH      0.00      0.00      0.00      0.00      0.00     0.00
 loop_
+  _diffrn_scan_frame_axis.scan_id
   _diffrn_scan_frame_axis.frame_id
   _diffrn_scan_frame_axis.axis_id
   _diffrn_scan_frame_axis.angle
   _diffrn_scan_frame_axis.displacement
-         FRAME1    GONIOMETER_PHI      0.00      0.00      
-         FRAME1    DETECTOR_Z          0.00      72.17     
-         FRAME1    DETECTOR_Y          0.00      0.00      
-         FRAME1    DETECTOR_X          0.00      0.00      
-         FRAME1    DETECTOR_PITCH      0.00      0.00      
-         Frame2    GONIOMETER_PHI      2.00      0.00      
-         Frame2    DETECTOR_Z          0.00      72.17     
-         Frame2    DETECTOR_Y          0.00      0.00      
-         Frame2    DETECTOR_X          0.00      0.00      
-         Frame2    DETECTOR_PITCH      0.00      0.00      
-         Frame3    GONIOMETER_PHI      4.00      0.00      
-         Frame3    DETECTOR_Z          0.00      72.17     
-         Frame3    DETECTOR_Y          0.00      0.00      
-         Frame3    DETECTOR_X          0.00      0.00      
-         Frame3    DETECTOR_PITCH      0.00      0.00      
-         Frame4    GONIOMETER_PHI      6.00      0.00      
-         Frame4    DETECTOR_Z          0.00      72.17     
-         Frame4    DETECTOR_Y          0.00      0.00      
-         Frame4    DETECTOR_X          0.00      0.00      
-         Frame4    DETECTOR_PITCH      0.00      0.00      
-         Frame5    GONIOMETER_PHI      8.00      0.00      
-         Frame5    DETECTOR_Z          0.00      72.17     
-         Frame5    DETECTOR_Y          0.00      0.00      
-         Frame5    DETECTOR_X          0.00      0.00      
-         Frame5    DETECTOR_PITCH      0.00      0.00 
+  SCAN1       FRAME1    GONIOMETER_PHI      0.00      0.00      
+  SCAN1       FRAME1    DETECTOR_Z          0.00      72.17     
+  SCAN1       FRAME1    DETECTOR_Y          0.00      0.00      
+  SCAN1       FRAME1    DETECTOR_X          0.00      0.00      
+  SCAN1       FRAME1    DETECTOR_PITCH      0.00      0.00      
+  SCAN1       Frame2    GONIOMETER_PHI      2.00      0.00      
+  SCAN1       Frame2    DETECTOR_Z          0.00      72.17     
+  SCAN1       Frame2    DETECTOR_Y          0.00      0.00      
+  SCAN1       Frame2    DETECTOR_X          0.00      0.00      
+  SCAN1       Frame2    DETECTOR_PITCH      0.00      0.00      
+  SCAN1       Frame3    GONIOMETER_PHI      4.00      0.00      
+  SCAN1       Frame3    DETECTOR_Z          0.00      72.17     
+  SCAN1       Frame3    DETECTOR_Y          0.00      0.00      
+  SCAN1       Frame3    DETECTOR_X          0.00      0.00      
+  SCAN1       Frame3    DETECTOR_PITCH      0.00      0.00      
+  SCAN1       Frame4    GONIOMETER_PHI      6.00      0.00      
+  SCAN1       Frame4    DETECTOR_Z          0.00      72.17     
+  SCAN1       Frame4    DETECTOR_Y          0.00      0.00      
+  SCAN1       Frame4    DETECTOR_X          0.00      0.00      
+  SCAN1       Frame4    DETECTOR_PITCH      0.00      0.00      
+  SCAN1       Frame5    GONIOMETER_PHI      8.00      0.00      
+  SCAN1       Frame5    DETECTOR_Z          0.00      72.17     
+  SCAN1       Frame5    DETECTOR_Y          0.00      0.00      
+  SCAN1       Frame5    DETECTOR_X          0.00      0.00      
+  SCAN1       Frame5    DETECTOR_PITCH      0.00      0.00 
 loop_
   _axis.id
   _axis.type
