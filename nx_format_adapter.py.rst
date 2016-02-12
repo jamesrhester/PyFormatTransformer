@@ -53,9 +53,9 @@ any key that uses them. ::
     canonical_groupings = {('wavelength id',):['incident wavelength'],
     ('detector axis id',):['detector axis vector mcstas','detector axis offset mcstas','detector axis type'],
     ('goniometer axis id',):['goniometer axis vector mcstas','goniometer axis offset mcstas','goniometer axis type'],
-    ('full simple data scan id',):['full simple data'],
+    ('simple data frame id',):['simple data'],
     ('data axis id',):['data axis precedence'],
-    ('axis location scan id', 'axis location axis id', 'axis location frame id'):['frame axis location angular position']
+    ('goniometer location axis id', 'goniometer axis location frame id'):['goniometer axis angular position']
     }
 
 
@@ -129,18 +129,15 @@ The order is therefore:
             "axis vector mcstas":([],"@vector",None,None),
             "axis offset mcstas":([],"@offset",None,None),
             "axis id":(["NXtransformation"],"",None,None),
-            "data axis id":(["NXinstrument","NXdetector","NXdata"],"data@axes",self.get_axes,self.set_axes),
-            "data axis precedence":(["NXinstrument","NXdetector","NXdata"],"data@axes",self.get_axis_order,self.create_axes,),
-            "full simple data":(["NXinstrument","NXdetector","NXdata"],"data",None,None),
+            "simple data":(["NXinstrument","NXdetector","NXdata"],"data",None,None),
             "goniometer axis id":(["NXsample","NXtransformation"],"",None,None),
             "goniometer axis vector mcstas":([],"@vector",None,None),
             "goniometer axis offset mcstas":([],"@offset",None,None),
-            "simple scan goniometer axis positions":([],"positions",None,None),
-            "simple scan goniometer axis name":([],"",None,None),
             "detector axis id":(["NXinstrument","NXdetector","NXtransformation"],"",None,None),
             "detector axis vector mcstas":([],"@vector",None,None),
             "detector axis offset mcstas":([],"@offset",None,None),
-            "scan id":([],"",[],None,None)  #entry name
+            "goniometer axis angular position":([],"position",None,None),
+            "__data_axis_info":(["NXinstrument","NXdetector","NXdata"],"data@axes",None,None),
             }
 
 
@@ -169,9 +166,8 @@ of these equivalents here, keyed to the main entry in our location
 table.  We expand the location and ordering tables to save checking each time. ::
 
             self.equivalent_ids = {
-            "axis id":["axis location axis id"],
-            "scan id":["full simple data scan id"],
-            "frame id":["axis location frame id"]
+            "goniometer axis id":["goniometer location axis id"],
+            "frame id":["goniometer axis location frame id","simple data frame id"]
             }
 
             for k,i in self.equivalent_ids.items():
@@ -181,7 +177,14 @@ table.  We expand the location and ordering tables to save checking each time. :
                 if k in self.ordering_ids:
                     for one_id in i:
                         self.ordering_ids.append(one_id)
-
+            print 'NX: ordered ids now ' + `self.ordering_ids`
+            
+            # data axis precedence is handled differently as it is encoded
+            # in the value
+            try:
+                del self.domain_names[('data axis id',)]
+            except KeyError:
+                pass
             # for ease of use later
             self.keyed_names = set()
             [self.keyed_names.update(n) for n in self.domain_names.values()]
@@ -197,12 +200,25 @@ Specific writing orders
 If we are writing an attribute, we need the thing that it is an attribute of
 to be written first.  Each entry in this dict is a canonical name: the value is
 a list of canonical names that can only be written after the key name.  We augment
-this list with the domain keys as well, but remove any that are auto-generated. ::
+this list with the domain keys as well, but remove any that are auto-generated.
+Do not put domain keys into this list, as items in this list are output first
+and outputting keys requires careful expansion relative to the dependent names. ::
 
-            self.write_orders = {'full simple data':['data axis precedence','data axis id'],
-                 'simple scan axis positions':['simple scan axis name'],
+            self.write_orders = {'simple data':['data axis precedence','data axis id'],
                  }
-            
+
+Synthetic data
+--------------
+
+Sometimes data are embedded inside a single data value. In this case, we use an internal
+name to refer to the synthetic value. The following table is indexed by synthetic name,
+with each entry consisting of list of canonical names,creation function,extraction function. ::
+    
+            self.synthetic_values = {'__data_axis_info':(["data axis precedence","data axis id"],
+                                                         self.create_axes,self.extract_data_axes)}
+
+            self.from_synthetic = set()
+            [self.from_synthetic.update(n[0]) for n in self.synthetic_values.values()]
             
 Handling units
 --------------
@@ -246,7 +262,8 @@ an HDF5 group. ::
            return getattr(child.nxgroup,"nxclass")== putative_parent
 
 We return both the value and the units. Note that the asterisk denotes a value
-attached to the group itself.::
+attached to the group itself.  We do not want any NX artefacts left in the
+value (numpy is OK) hence we are ::
        
         def get_field_value(self,base_group,name):
            """Return value of name in parent_group"""
@@ -270,12 +287,11 @@ attached to the group itself.::
                    units = getattr(allvalues,"units")
                except KeyError:
                    pass
-               allvalues = numpy.atleast_1d(allvalues)
            else:
                allvalues = parent_group
            if not is_attr:
                if not is_group:
-                   return allvalues,units
+                   return allvalues.nxdata,units
                else:
                    if prop == "":
                        return allvalues.nxname,None
@@ -294,43 +310,36 @@ Conversion functions
 ====================
 
 These functions extract and set information that is encoded within values instead of having
-a name or group-level address.  They are passed a list, which in this case is a single-
-element list as there is only a single array of data. ::
+a name or group-level address.  The extraction function is passed a single value (the synthetic
+value) and should return a tuple in the order that self.synthetic_values has specified the
+result canonical names.  Likewise, the synthesis function is passed a tuple in the order
+specified in self.canonical_names and should return a single synthetic value. ::
 
-        def get_axes(self,axes_string):
-            """Extract the axis names for the array data"""
-            indi_axes = axes_string[0].split(":")
-            return numpy.array(indi_axes)
-
-        def get_axis_order(self,axes_string):
+        def extract_data_axes(self,axes_string):
             """Return the axis precedence for the array data"""
-            axes = self.get_axes(axes_string)
-            return numpy.arange(1,len(axes)+1)
+            axes = numpy.array(axes_string.split(":"))
+            return numpy.arange(1,len(axes)+1),axes
     
 
 Setting axes
 ------------
 
 The axes for a datablock are stored as attributes of that block, with the order of appearance
-of the axis corresponding to its precedence.  Therefore, we cannot output the axis id until we
-have the precedence, so we simply store the IDs.  As writing of precedence must wait until
-we have the IDs, we can skip checking that the axis IDs are present. ::
-
-        def set_axes(self,axis_list):
-            """Remember the data axis ids"""
-            self.data_axis_ids = axis_list
-            return None  #do not write this ever
+of the axis corresponding to its precedence.  ::
     
-        def create_axes(self,axis_order):
+        def create_axes(self,incoming):
             """Create and set the axis specification string"""
+            print 'NX: creating axes string with ' + `incoming`
+            axis_list = incoming[1]
+            axis_order = incoming[0]
             axes_in_order = range(len(axis_order))
-            for axis,axis_pos in zip(self.data_axis_ids,axis_order):
+            for axis,axis_pos in zip(axis_list,axis_order):
                 axes_in_order[axis_pos-1] = axis
             axis_string = ""
             for axis in axes_in_order:
                 axis_string = axis_string + axis + ":"
             print 'NX: Created axis string ' + `axis_string[:-1]`
-            return axis_string[:-1]
+            return (axis_string[:-1],'Text','None')
     
 Managing units
 --------------
@@ -428,7 +437,8 @@ of NeXus to handle unit transformations. ::
                     raise ValueError, "Integer type has actual type %s" % incoming_type
             elif target_type == "Text":
                 if incoming_type not in 'OSU':
-                    raise ValueError, "Character type has actual type %s" % incoming_type
+                    print "Warning: character type has actual type %s" % incoming_type
+                    incoming_data = str(incoming_data)
             return incoming_data
             
 The API functions
@@ -451,13 +461,16 @@ Obtaining values
 
 We are provided with a name.  We find its basic form using self.equivalent_ids, and then use
 our name_locations table to extract all values.  Our unit conversion operates on abbreviated
-symbols, so we obtain an abbreviated form. ::
+symbols, so we obtain an abbreviated form. All returned values must be arrays, but our
+internal representation may not be an array; so we convert to an array once we have obtained
+the raw representation. ::
 
         def get_by_name(self, name,value_type,units=None):
           """Return values as [[value_type]] for [[name]]"""
           raw_values,old_units = self.internal_get_by_name(name)
           if raw_values is None or raw_values == []:
               return raw_values
+          raw_values = numpy.atleast_1d(raw_values)
           print 'NX: raw value for %s:' % name + `raw_values`
           before_units = numpy.atleast_1d(map(lambda a:self.check_type(a,value_type),raw_values))
           unit_abbrev = self.unit_conversions.get(units,units)
@@ -478,6 +491,15 @@ case that these keys are in the range of a function of other keys. ::
               # first check that it hasn't been stored already
               if name in self._stored:
                   return self._stored[name]
+              # is it buried in a synthetic value?
+              if name in self.from_synthetic:
+                  internal_name = [a for a in self.synthetic_values.keys() if name in self.synthetic_values[a][0]][0]
+                  external_names,creat_func,extract_func = self.synthetic_values[internal_name]
+                  internal_val,dummy = self.internal_get_by_name(internal_name)
+                  new_vals = extract_func(internal_val)
+                  for n,v in zip(external_names,new_vals):
+                      self._stored[n] = v,None
+                  return self._stored[name]
               # find by key, if it is there
               is_a_primary = len([k for k in self.domain_names.values() if name in k])>0
               if is_a_primary:
@@ -489,10 +511,8 @@ case that these keys are in the range of a function of other keys. ::
                   else:
                       print 'NX: tried to find %s, not found' % `name`
                       raise ValueError, 'Primary name not found: %s' % name
-              else:   #might be a key
-                  poss_names = [k[1] for k in self.domain_names.items() if name in k[0]]
-                  if len(poss_names)==0:
-                      raise ValueError, 'No primary name found for key name: %s' % name
+              poss_names = [k[1] for k in self.domain_names.items() if name in k[0]]
+              if len(poss_names)>0:
                   print 'NX: possible names for %s: ' % name + `poss_names`
                   for pn in poss_names[0]:
                       try:
@@ -503,9 +523,15 @@ case that these keys are in the range of a function of other keys. ::
                           continue
                       if name in self._stored:
                           return self._stored[name]
-              # if we get to here, we have a dangling key: just return it straight
-              result, result_classes = zip(*self.get_group_values(name,self.current_entry))
-              return result,None
+              # if we get to here, we can only return what we find:
+              if name not in self.name_locations:
+                  raise ValueError, 'No such name known: ' + `name`
+              group_loc,property,dummy1,dummy2 = self.name_locations[name]
+              if property == "" or property[0] == "@":
+                  result, result_classes = zip(*self.get_group_values(name,self.current_entry))
+                  return result,None
+              else:
+                  return self.get_field_value(self.current_entry,name)
                       
 Obtaining values of groups.  We find the common name in [[name_locations]] and then trip
 down the class hierarchy, collecting all groups matching the list of groups.  We return
@@ -564,6 +590,11 @@ duplicate key values for each sub-entry. ::
                   main_data = self.get_field_value(self.current_entry,name)
                   return {name: main_data, all_keys[0]:(self.make_id(main_data),None)}
               all_keys = list(all_keys)
+              if all_keys[-1] in self.ordering_ids:
+                  ordering_key = all_keys[-1]
+                  all_keys = all_keys[:-1]
+              else:
+                  ordering_key = None
               all_keys.append(name)
               key_tree,dummy = self.get_sub_tree(self.current_entry,all_keys)
               if key_tree is None:
@@ -574,23 +605,42 @@ duplicate key values for each sub-entry. ::
               [final_arrays.append([]) for k in all_keys]  #to avoid pointing to the same list
               [units_array.append(None) for k in all_keys]
               self.synthesize_values(final_arrays,key_tree,units_array)
-              return dict(zip(all_keys,zip(final_arrays,units_array)))
+              valuedict = dict(zip(all_keys,zip(final_arrays,units_array)))
+              if ordering_key is not None:
+                  counting_arrays = []
+                  dummy_array = []
+                  [counting_arrays.append([]) for k in all_keys]  #to avoid pointing to the same list
+                  [dummy_array.append(None) for k in all_keys]
+                  print 'NX: creating ordering id'
+                  ord_tree,dummy = self.get_sub_tree(self.current_entry,all_keys,do_ordering=True)
+                  self.synthesize_values(counting_arrays,ord_tree,dummy_array)
+                  counting_dict = dict(zip(all_keys,zip(counting_arrays,dummy_array)))
+                  valuedict[ordering_key]=counting_dict[all_keys[-1]]
+                  print 'NX: set %s to %s' % (ordering_key,valuedict[ordering_key])
+              return valuedict
 
 Note that the following routine discards the units attribute. TODO: make sure that
 the appropriate units for each name are appropriately registered. We can assume
 for the purposes of this demonstration that units only need to be registered once. ::
 
-        def get_sub_tree(self,parent_group,keynames):
-              """Get the key tree underneath parent_group"""
+        def get_sub_tree(self,parent_group,keynames,do_ordering=False):
+              """Get the key tree underneath parent_group, or return an ordering
+              if do_ordering is True"""
               print 'NX: get_sub_tree called with parent %s, keys %s' % (parent_group,keynames)
               sub_dict = {}
               if len(keynames)==1:
-                  return self.get_field_value(parent_group,keynames[0])  #value itself
+                  value = self.get_field_value(parent_group,keynames[0])  #value itself
+                  if do_ordering:
+                      print 'NX: substituting ordering for actual values'
+                      value = self.make_id(value[0])
+                      return value,None
+                  else:
+                      return value
               keys_and_groups = self.get_group_values(keynames[0],parent_group)
               if keys_and_groups is None:
                   return None
               for another_key,another_group in keys_and_groups:
-                  new_tree,units = self.get_sub_tree(another_group,keynames[1:])
+                  new_tree,units = self.get_sub_tree(another_group,keynames[1:],do_ordering)
                   if new_tree is not None:
                       sub_dict[another_key] = (new_tree,units)
               return sub_dict,None
@@ -646,7 +696,8 @@ the dependent values will be distributed between each class.) ::
 The following recursive routine creates a tree from equal length arrays.  The output tree, in
 the form of a python dictionary, has unique nodes at each level corresponding to the unique
 values found in each supplied array.  To allow for bottom-level arrays with more than
-one dimension, max_depth can be supplied to terminate earlier.::
+one dimension, max_depth can be supplied to terminate earlier. The construction is such
+that the final leaf of the tree will be an array of elements. ::
                                                                                         
         def create_tree(self,start_arrays,current_depth=0, max_depth=None):
             """Return a tree created by partitioning each array into unique elements, with
@@ -739,7 +790,7 @@ cannot contain any keyed groups). ::
             """Store a non-group value (attribute or field)"""
             location_info = self.name_locations[name]
             group_location = location_info[0]
-            print 'NX: setting %s (location %s) to %s' % (name,`location_info`,value)
+            print 'NX: setting %s (location %s relative to %s) to %s' % (name,`location_info`,`parent_group`,value)
             current_loc = self._find_group(group_location,parent_group)
             self.write_a_value(current_loc,location_info[1],value,value_type,units)
                               
@@ -851,16 +902,25 @@ that we can order the values in each branch of the tree correctly. ::
             """Finish all processing"""
             # check our write order list
             output_names = set(self._stored.keys())
-            self.has_data.append('full simple data' in output_names)
+            self.has_data.append('simple data' in output_names)
             print 'NX:now outputting ' + `output_names`
+            priority_names = set()
+            wait_names = set()
             for name in output_names:
-                wait_names = set([k for k in self.write_orders.keys() if name in self.write_orders[k]])
+                priority_names.update([k for k in self.write_orders.keys() if name in self.write_orders[k]])
                 # check our id dependencies
                 [wait_names.update(list(k)) for k in self.domain_names.keys() if name in self.domain_names[k]]
-                print 'Wait names now: ' + `wait_names`
-                waiting = wait_names.difference(output_names)
-                if len(waiting)>0:
-                    raise ValueError, "Following IDs not found but needed in order to output %s:" % name + `waiting`
+            waiting = (priority_names | wait_names) - output_names
+            if len(waiting)>0:
+                raise ValueError, "Following IDs not found but needed in order to output:" + `waiting`
+            # create any synthetic names
+            for synth_name,synth_methods in self.synthetic_values.items():
+                external_names,create_meth,dummy = self.synthetic_values[synth_name]
+                if output_names.intersection(external_names) == set(external_names):
+                    ext_vals = [self._stored[k][0] for k in external_names]
+                    self._stored[synth_name] = create_meth(ext_vals)
+                    output_names.difference_update(external_names)
+                    output_names.add(synth_name)
             # now write out all names
             # get all key-dependent names
             primary_names = set()
@@ -868,8 +928,49 @@ that we can order the values in each branch of the tree correctly. ::
              if len(n[0])>1 or n[0][0] not in self.ordering_ids]
             # remove those that only require ordering keys
             primary_names = primary_names.intersection(output_names)
-            # primary names require keys
+            # output wait items as a priority
+            for pn in priority_names:
+                print 'NX: outputting priority name: ' + pn
+                if pn in primary_names:
+                    self.output_keyed_values([pn],output_names)
+                else:
+                    self.output_unkeyed_values([pn],output_names)
             print 'NX: now outputting primary names ' + `primary_names`
+            self.output_keyed_values(primary_names,output_names)
+            # up next: names that are non-ordering keys, with no primary item
+            dangling_keys = self.all_keys.intersection(output_names).difference(self.ordering_ids)
+            print 'NX: found dangling keys %s' % `dangling_keys`
+            while len(dangling_keys)>0:
+                dk = dangling_keys.pop()
+                key_seq = [list(k) for k in self.domain_names.keys() if dk in k][0]
+                key_seq = [k for k in key_seq[:key_seq.index(dk)+1] if k in self._stored.keys()]
+                key_vals = [self._stored[k][0] for k in key_seq]
+                key_vals.append([[]]*len(key_vals[-1]))  #dummy value
+                tree_for_output = self.create_tree(key_vals,max_depth=len(key_vals)-1)
+                self.output_tree(self.current_entry,key_seq,tree_for_output,tree_for_output)
+                output_names.difference_update(key_seq)
+                dangling_keys.difference_update(key_seq)
+            # straight names require no keys, or ordering keys only
+            straight_names = output_names.difference(self.ordering_ids)
+            print 'NX: now outputting straight names ' + `straight_names`
+            self.output_unkeyed_values(straight_names,output_names)
+            # Finished: check that nothing is left
+            if len(output_names)>0:
+                raise ValueError, 'Did not output all data: %s remain' % `output_names`
+            self.all_entries.append(self.current_entry)
+            self.current_entry = None
+            self.new_entry()
+            return
+
+Output a keyed value
+--------------------
+
+This routine outputs a value that is dependent on a key.  First the sequence of keys is
+determined. Finally, the set passed in as [[output_names]] is updated to remove anything
+that has been output. ::
+
+        def output_keyed_values(self,primary_names,output_names):
+            """Output all names in primary_names, including any keys"""
             for pn in primary_names:
                 pn_keys = [k for k in self.domain_names.keys() if pn in self.domain_names[k]]
                 pn_value = self._stored[pn][0]
@@ -898,23 +999,14 @@ that we can order the values in each branch of the tree correctly. ::
                 output_names.remove(pn)
                 output_names.difference_update(pn_keys)
                 output_names.discard(ordering_key)
-            # up next: names that are non-ordering keys, with no primary item
-            dangling_keys = self.all_keys.intersection(output_names).difference(self.ordering_ids)
-            print 'NX: found dangling keys %s' % `dangling_keys`
-            while len(dangling_keys)>0:
-                dk = dangling_keys.pop()
-                key_seq = [list(k) for k in self.domain_names.keys() if dk in k][0]
-                key_seq = [k for k in key_seq[:key_seq.index(dk)+1] if k in self._stored.keys()]
-                key_vals = [self._stored[k][0] for k in key_seq]
-                key_vals.append([[]]*len(key_vals[-1]))  #dummy value
-                tree_for_output = self.create_tree(key_vals,max_depth=len(key_vals)-1)
-                self.output_tree(self.current_entry,key_seq,tree_for_output,tree_for_output)
-                output_names.difference_update(key_seq)
-                dangling_keys.difference_update(key_seq)
-            # straight names require no keys, or ordering keys only
-            straight_names = output_names.difference(self.ordering_ids)
-            print 'NX: now outputting straight names ' + `straight_names`
-            for sn in straight_names:
+
+Output unkeyed values
+---------------------
+
+Values that have nothing other than an ordering key can be output directly. ::
+
+        def output_unkeyed_values(self,straight_names,output_names):
+            for sn in straight_names:      
                 if sn not in self.keyed_names:
                     output_order = self._stored[sn][0]
                 else:   #has an ordered key only
@@ -925,13 +1017,6 @@ that we can order the values in each branch of the tree correctly. ::
                 self.store_a_value(self.current_entry,sn,output_order,self._stored[sn][1],
                                        self._stored[sn][2])
                 output_names.remove(sn)
-            # Finished: check that nothing is left
-            if len(output_names)>0:
-                raise ValueError, 'Did not output all data: %s remain' % `output_names`
-            self.all_entries.append(self.current_entry)
-            self.current_entry = None
-            self.new_entry()
-            return
 
         def output_file(self,filename):
             """Output a file containing the data units in self.all_entries"""
