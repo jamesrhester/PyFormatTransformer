@@ -137,6 +137,7 @@ The order is therefore:
             "detector axis vector mcstas":([],"@vector",None,None),
             "detector axis offset mcstas":([],"@offset",None,None),
             "goniometer axis angular position":([],"position",None,None),
+            "simple scan frame scan id":([],"",None,None), # top level
             "__data_axis_info":(["NXinstrument","NXdetector","NXdata"],"data@axes",None,None),
             }
 
@@ -454,7 +455,7 @@ as there are so many multiple-valued names. ::
         def get_single_names(self):
             """Return a list of canonical ids that may only take a single
             value in one data unit"""
-            return ["full simple data scan id"]
+            return ["simple scan frame scan id"]
 
 Obtaining values
 ----------------
@@ -518,8 +519,6 @@ case that these keys are in the range of a function of other keys. ::
                       try:
                           result = self.internal_get_by_name(pn)
                       except ValueError:
-                          import traceback
-                          traceback.print_exc()
                           continue
                       if name in self._stored:
                           return self._stored[name]
@@ -1003,7 +1002,8 @@ that has been output. ::
 Output unkeyed values
 ---------------------
 
-Values that have nothing other than an ordering key can be output directly. ::
+Values that have nothing other than an ordering key can be output directly. The top-level
+name is a special case. ::
 
         def output_unkeyed_values(self,straight_names,output_names):
             for sn in straight_names:      
@@ -1014,7 +1014,10 @@ Values that have nothing other than an ordering key can be output directly. ::
                     output_order,sort_order = self.create_index(self._stored[ordered_key][0],
                                                                 self._stored[sn][0])
                     output_names.remove(ordered_key)
-                self.store_a_value(self.current_entry,sn,output_order,self._stored[sn][1],
+                if sn in self.get_single_names():
+                    self.current_entry.nxname = output_order[0]
+                else:
+                    self.store_a_value(self.current_entry,sn,output_order,self._stored[sn][1],
                                        self._stored[sn][2])
                 output_names.remove(sn)
 
