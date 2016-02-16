@@ -18,7 +18,6 @@ _diffrn.id                              DS1
 _diffrn_source.diffrn_id                DS1
 _diffrn_source.source                   synchrotron
 _diffrn_source.type                     '  crystallography'
-_diffrn_radiation_wavelength.id         L1
 _diffrn_measurement_axis.measurement_id                                         GONIOMETER
 _diffrn_measurement_axis.axis_id        GONIOMETER_PHI
 loop_
@@ -155,11 +154,10 @@ loop_
          image_1   4         linear    2.53      65535     0         2         2        
          image_1   5         linear    2.53      65535     0         2         2
 loop_
-  _diffrn_radiation.wavelength_id
-  _diffrn_radiation.diffrn_id
+  _diffrn_radiation_wavelength_id
   _diffrn_radiation_wavelength.wavelength
   _diffrn_radiation_wavelength.wt
-         L1        DS1       0.711955  1.0 
+         L1        0.711955  1.0 
 loop_
   _diffrn_scan.id
   _diffrn_scan.frame_id_start

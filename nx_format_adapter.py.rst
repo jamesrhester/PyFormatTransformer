@@ -126,9 +126,6 @@ The order is therefore:
             "incident wavelength":(["NXinstrument","NXmonochromator",],"wavelength",None,None),
             "probe":(["NXinstrument","NXsource"],"probe",self.convert_probe,None),
             "start time": ([],"@start_time","to be done",None),
-            "axis vector mcstas":([],"@vector",None,None),
-            "axis offset mcstas":([],"@offset",None,None),
-            "axis id":(["NXtransformation"],"",None,None),
             "simple data":(["NXinstrument","NXdetector","NXdata"],"data",None,None),
             "goniometer axis id":(["NXsample","NXtransformation"],"",None,None),
             "goniometer axis vector mcstas":([],"@vector",None,None),
@@ -238,7 +235,9 @@ it is denoted identically in both the DDLm dictionary and NeXus. ::
                 'picometres': 'pm',  
                 'femtometres':'fm',
                 'celsius': 'C',
-                'kelvins':'K'
+                'kelvins':'K',
+                'degrees':'deg',
+                'radians':'rad'
             }
 
 
@@ -301,11 +300,16 @@ value (numpy is OK) hence we are ::
            else:
                print 'NX: retrieving %s attribute (prop was %s)' % (attr,prop)
                try:
-                   allvalues = getattr(allvalues,attr)  #attribute must exist
+                   final_values = getattr(allvalues,attr)  #attribute must exist
                except nexus.NeXusError:
                    raise ValueError, 'Cannot read %s in %s' % (attr,allvalues)
-               print 'NX: found ' + `allvalues`
-               return allvalues,None
+               # try units as attribute with "_units" appended
+               try:
+                   units = getattr(allvalues,attr+"_units")
+               except:
+                   units = None
+               print 'NX: found ' + `final_values` +','+ `units`
+               return final_values,units
 
 Conversion functions
 ====================
@@ -340,7 +344,7 @@ of the axis corresponding to its precedence.  ::
             for axis in axes_in_order:
                 axis_string = axis_string + axis + ":"
             print 'NX: Created axis string ' + `axis_string[:-1]`
-            return (axis_string[:-1],'Text','None')
+            return (axis_string[:-1],'Text',None)
     
 Managing units
 --------------
@@ -363,7 +367,7 @@ purposes we use a simple 'a+b*m' conversion table. ::
                              ("pm","m"):(0,1e-9),
                              ("A","m"):(0,1e-10),
                              # angle
-                             ("radians","degrees"):(0,180/math.pi),
+                             ("rad","deg"):(0,180/math.pi),
                              # temperature
                              ("K","C"):(-273,1)
                              }
@@ -392,7 +396,11 @@ generate IDs, we simply generate sequential values. ::
 
         def make_id(self,value_list):
             """Synthesize an ID"""
-            return range(1,len(value_list)+1)
+            try:
+                newids = range(1,len(value_list)+1)
+            except TypeError:         #assume is single value
+                newids = [1]
+            return newids
 
 Converting fixed lists
 ----------------------
@@ -468,7 +476,10 @@ the raw representation. ::
 
         def get_by_name(self, name,value_type,units=None):
           """Return values as [[value_type]] for [[name]]"""
-          raw_values,old_units = self.internal_get_by_name(name)
+          try:
+              raw_values,old_units = self.internal_get_by_name(name)
+          except ValueError:
+              raw_values = None
           if raw_values is None or raw_values == []:
               return raw_values
           raw_values = numpy.atleast_1d(raw_values)
@@ -527,8 +538,12 @@ case that these keys are in the range of a function of other keys. ::
                   raise ValueError, 'No such name known: ' + `name`
               group_loc,property,dummy1,dummy2 = self.name_locations[name]
               if property == "" or property[0] == "@":
-                  result, result_classes = zip(*self.get_group_values(name,self.current_entry))
-                  return result,None
+                  n = self.get_group_values(name,self.current_entry)
+                  if n is not None:
+                      result, result_classes = zip(*n)
+                      return result,None
+                  else:
+                      return None,None
               else:
                   return self.get_field_value(self.current_entry,name)
                       
@@ -560,6 +575,8 @@ multiple values, as otherwise the upper groups would themselves be keys. ::
                   new_classes = self.get_by_class(upper_group,target_class)
                   if len(new_classes)>1:   #still more to come
                       raise ValueError, 'Multiple groups found of type %s but only one expected: %s' % (target_class,new_classes)
+                  elif len(new_classes)==0: #nothing there
+                      return None
                   upper_group = new_classes[0]
               new_classes = self.get_by_class(new_classes[0],upper_classes[0])
               if len(new_classes)==0:
@@ -573,8 +590,13 @@ multiple values, as otherwise the upper groups would themselves be keys. ::
 
 This routine is the reverse of the get_sub_tree routine. Given a name, we return a bunch
 of flat arrays in a dictionary indexed by key name.  Note that we cannot generate the
-value of a key unless we know the structure of the indexed item, as we will need to
-duplicate key values for each sub-entry. ::
+array value corresponding to a key unless we know the structure of the indexed item, as we will need to
+duplicate key values for each sub-entry. Furthermore, there is no way in NeXus to distinguish between
+a single-valued 3-vector and a sequence of 3 values.  We therefore assume that if there is
+no ordering key, then an item is in fact a vector. This means that we have to add an extra
+dimension to such vector values after getting the NX tree to make sure that they are
+concatenated appropriately.  To save re-traversing the tree, this encapsulation is
+performed when the 'is_ordering' flag is set in the 'get_sub_tree' call. ::
 
         def get_key_arrays(self,name):
               """Get arrays corresponding to all keys and values used with name"""
@@ -587,7 +609,7 @@ duplicate key values for each sub-entry. ::
                   return {name: self.get_field_value(self.current_entry,name)}
               if len(all_keys)==1 and all_keys[0] in self.ordering_ids:
                   main_data = self.get_field_value(self.current_entry,name)
-                  return {name: main_data, all_keys[0]:(self.make_id(main_data),None)}
+                  return {name: main_data, all_keys[0]:(self.make_id(main_data[0]),None)}
               all_keys = list(all_keys)
               if all_keys[-1] in self.ordering_ids:
                   ordering_key = all_keys[-1]
@@ -595,79 +617,84 @@ duplicate key values for each sub-entry. ::
               else:
                   ordering_key = None
               all_keys.append(name)
-              key_tree,dummy = self.get_sub_tree(self.current_entry,all_keys)
+              key_tree,dummy1,ordering_tree = self.get_sub_tree(self.current_entry,all_keys,do_ordering=ordering_key is not None)
               if key_tree is None:
                   raise ValueError, 'No tree found for key list ' + `all_keys`
               print 'NX: found key tree ' + `key_tree`
               final_arrays = []
-              units_array = []
               [final_arrays.append([]) for k in all_keys]  #to avoid pointing to the same list
-              [units_array.append(None) for k in all_keys]
-              self.synthesize_values(final_arrays,key_tree,units_array)
+              length,units_array = self.synthesize_values(final_arrays,key_tree)
               valuedict = dict(zip(all_keys,zip(final_arrays,units_array)))
               if ordering_key is not None:
                   counting_arrays = []
                   dummy_array = []
                   [counting_arrays.append([]) for k in all_keys]  #to avoid pointing to the same list
-                  [dummy_array.append(None) for k in all_keys]
                   print 'NX: creating ordering id'
-                  ord_tree,dummy = self.get_sub_tree(self.current_entry,all_keys,do_ordering=True)
-                  self.synthesize_values(counting_arrays,ord_tree,dummy_array)
+                  length,dummy_array = self.synthesize_values(counting_arrays,ordering_tree)
                   counting_dict = dict(zip(all_keys,zip(counting_arrays,dummy_array)))
                   valuedict[ordering_key]=counting_dict[all_keys[-1]]
                   print 'NX: set %s to %s' % (ordering_key,valuedict[ordering_key])
               return valuedict
 
-Note that the following routine discards the units attribute. TODO: make sure that
-the appropriate units for each name are appropriately registered. We can assume
-for the purposes of this demonstration that units only need to be registered once. ::
+This recursive routine creates a tree structure from the NX file. If do_ordering is True,
+a parallel ordering tree is created, and if it is False, any array-valued items are
+considered to be vectors and provided with an extra level of encapsulation. ::
 
         def get_sub_tree(self,parent_group,keynames,do_ordering=False):
               """Get the key tree underneath parent_group, or return an ordering
               if do_ordering is True"""
               print 'NX: get_sub_tree called with parent %s, keys %s' % (parent_group,keynames)
               sub_dict = {}
-              if len(keynames)==1:
-                  value = self.get_field_value(parent_group,keynames[0])  #value itself
+              ordering_dict = {}
+              if len(keynames)==1:  #bottom of tree
+                  value = self.get_field_value(parent_group,keynames[0])  #value, units
                   if do_ordering:
-                      print 'NX: substituting ordering for actual values'
-                      value = self.make_id(value[0])
-                      return value,None
+                      print 'NX: creating an ordering for actual values'
+                      return value[0],value[1],self.make_id(value[0])
                   else:
-                      return value
+                      if isinstance(value[0],numpy.ndarray):
+                          return [value[0]],value[1],None
+                      else:
+                          return value[0],value[1],None
               keys_and_groups = self.get_group_values(keynames[0],parent_group)
               if keys_and_groups is None:
-                  return None
+                  return None,None,None
               for another_key,another_group in keys_and_groups:
-                  new_tree,units = self.get_sub_tree(another_group,keynames[1:],do_ordering)
+                  new_tree,units,ordering_tree = self.get_sub_tree(another_group,keynames[1:],do_ordering)
                   if new_tree is not None:
                       sub_dict[another_key] = (new_tree,units)
-              return sub_dict,None
+                      ordering_dict[another_key] = (ordering_tree,None)
+              return sub_dict,None, ordering_dict
 
 When putting together arrays from a key tree, we assume that each entry in our tree will
 have units attached, which we harvest out and assume to be identical. ::
 
-        def synthesize_values(self,key_arrays,key_tree,units_array):
+        def synthesize_values(self,key_arrays,key_tree):
               """Given a key tree, return an array of equal-length values, one for
               each level in key_tree. Key_arrays and units_array
               should have the same length as the depth of key_tree.
 
               """
               print 'Called with %s, tree %s' % (`key_arrays`,`key_tree`)
+              units_array = [None]
               for one_key in key_tree.keys():
                   if isinstance(key_tree[one_key],dict):
-                     extra_length = self.synthesize_values(key_arrays[1:],key_tree[one_key],units_array[1:])
+                     extra_length,units = self.synthesize_values(key_arrays[1:],key_tree[one_key])
                      key_arrays[0].extend([one_key]*extra_length)
                      print 'Extended %s with %s' % (`key_arrays[0]`,`one_key`)
                   else:
                      value,units = key_tree[one_key]
+                     print 'Leaf value for %s is: ' % one_key + `value` + ',' + `units`
                      extra_length = len(value)
                      key_arrays[1].extend(value)
                      key_arrays[0].extend([one_key]*len(value))
-                     units_array[0] = units
+              if isinstance(units,list):  #not leaf value
+                  units_array.extend(units)
+              else:
+                  units_array.append(units)
               print 'Key arrays now ' + `key_arrays`
               print 'Units array now ' + `units_array`
-              return extra_length * len(key_tree)
+              return extra_length * len(key_tree),units_array
           
 Setting values
 --------------
@@ -683,25 +710,35 @@ the dependent values will be distributed between each class.) ::
 
         def partition(self,first_array,second_array):
             """Partition the second array into segments corresponding to identical values of the 
-            first array, returning the partitioned array and the unique values."""
+            first array, returning the partitioned array and the unique values. Each array is
+            a tuple ([values],units)."""
             print 'Partition called with 1st, 2nd:' + `first_array` + ' ' + `second_array`
-            combined = zip(first_array,second_array)
-            unique_vals = list(set(first_array))
+            combined = zip(first_array[0],second_array[0])
+            unique_vals = list(set(first_array[0]))
             final_vals = []
             for v in unique_vals:
-                final_vals.append([k[1] for k in combined if k[0] == v])
+                final_vals.append(([k[1] for k in combined if k[0] == v],second_array[1]))
+            print 'NX: partition returns ' + `final_vals`
             return final_vals,unique_vals
 
 The following recursive routine creates a tree from equal length arrays.  The output tree, in
 the form of a python dictionary, has unique nodes at each level corresponding to the unique
-values found in each supplied array.  To allow for bottom-level arrays with more than
-one dimension, max_depth can be supplied to terminate earlier. The construction is such
-that the final leaf of the tree will be an array of elements. ::
+values found in each supplied array. The construction is such
+that the final leaf of the tree will be an array of elements. As NeXus allows a sequence of
+three values to be interpreted as a single vector value, rather than a sequence of values, we should remove a dimension from
+those elements that represent a single vector rather than a sequence of (3) values. Trees
+created by this routine and get_sub_tree encapsulate these vectors in an extra layer; on
+output of such trees, this layer is removed if an ordering key is not used. ::
                                                                                         
         def create_tree(self,start_arrays,current_depth=0, max_depth=None):
             """Return a tree created by partitioning each array into unique elements, with
             each subsequent array being the next level in the tree. When the final arrays
-            have end_length elements the partitioning stops."""
+            have end_length elements the partitioning stops. Each element in start_arrays
+            is a two-element tuple ([values], units). """
+            check_len = set([len(a) for a in start_arrays])
+            if check_len != set([2]):
+                raise ValueError, 'Calls to create tree must provide ([values],units) tuples, we\
+                were passed ' + `start_arrays`
             print 'Creating a tree to depth %s from %s' % (`max_depth`,`start_arrays`)
             if current_depth == max_depth or \
                max_depth is None and len(start_arrays)==1:   #termination criterion
@@ -724,12 +761,17 @@ that the final leaf of the tree will be an array of elements. ::
 Writing a tree of values
 ------------------------
 
-This routine writes out a tree of values. ::
+This routine writes out a tree of values. If an ordering key is used, ordering_tree will
+differ from value_tree.  Both trees are traversed in parallel, and when a leaf node is
+reached, the output values are sorted into a canonical order and the ordering key then
+'disappears' and is recreated when reading in. If an ordering key is not used, any
+sequence (i.e. list) items used as output items must be vectors and one level of
+encapsulation is removed. ::
 
         def output_tree(self,parent_group,names,value_tree,ordering_tree):
             """Output a tree of values, with each level corresponding to values in [names]"""
             sort_order = None
-            print 'Outputting tree: ' + `value_tree`
+            print 'Outputting tree: ' + `value_tree` + ' with ordering ' + `ordering_tree`
             if len(names)==0:  #finished
                 return
             if isinstance(value_tree,dict):
@@ -738,11 +780,11 @@ This routine writes out a tree of values. ::
                     self.output_tree(child_group,names[1:],value_tree[one_key],ordering_tree[one_key])
             else:   #we are at the bottom level
                 # shortcut for single values
-                if ordering_tree != value_tree and (isinstance(value_tree,list) and len(value_tree)>1):
+                if ordering_tree != value_tree and (isinstance(value_tree[0],list) and len(value_tree[0])>1):
                     print 'Found ordering tree: %s for %s' % (`ordering_tree`,`value_tree`)
-                    output_order,sort_order = self.create_index(ordering_tree,value_tree)
+                    output_order,sort_order = self.create_index(ordering_tree[0],value_tree[0])
                 else:
-                    output_order = value_tree
+                    output_order,sort_order = value_tree[0][0],None
                 self.store_a_value(parent_group,names[0],output_order,self._stored[names[0]][1],self._stored[names[0]][2])
 
 When storing a value we are provided with a parent group.  We use the name to look up how to
@@ -808,15 +850,21 @@ sign).  ::
                 if unit_abbrev is not None:
                     current_loc[name].units = unit_abbrev
             else:
-                if unit_abbrev is not None:
-                    print 'Warning: trying to set units on attribute'
                 base,attribute = name.split('@')
+                if unit_abbrev is not None:
+                    print 'Warning: trying to set units %s on attribute, will write units to ' % `unit_abbrev` + attribute+'_units'
                 if base != '' and not current_loc.has_key(base):
                     raise AttributeError,'NX: Cannot write attribute %s as field %s missing' % (attribute,base)
                 elif base == '':  #group attribute
                     current_loc.attrs[attribute] = value
+                    if unit_abbrev is not None:
+                        current_loc.attrs[attribute+'_units'] = unit_abbrev
                 else:
                     current_loc[base].attrs[attribute] = value
+                    if unit_abbrev is not None:
+                        current_loc[base].attrs[attribute+'_units'] = unit_abbrev
+
+
                             
 Utility routine to select/create a group
 ----------------------------------------
@@ -943,8 +991,8 @@ that we can order the values in each branch of the tree correctly. ::
                 dk = dangling_keys.pop()
                 key_seq = [list(k) for k in self.domain_names.keys() if dk in k][0]
                 key_seq = [k for k in key_seq[:key_seq.index(dk)+1] if k in self._stored.keys()]
-                key_vals = [self._stored[k][0] for k in key_seq]
-                key_vals.append([[]]*len(key_vals[-1]))  #dummy value
+                key_vals = [(self._stored[k][0],self._stored[k][2]) for k in key_seq]
+                key_vals.append(([[]]*len(key_vals[-1][0]),None))  #dummy value
                 tree_for_output = self.create_tree(key_vals,max_depth=len(key_vals)-1)
                 self.output_tree(self.current_entry,key_seq,tree_for_output,tree_for_output)
                 output_names.difference_update(key_seq)
@@ -972,7 +1020,7 @@ that has been output. ::
             """Output all names in primary_names, including any keys"""
             for pn in primary_names:
                 pn_keys = [k for k in self.domain_names.keys() if pn in self.domain_names[k]]
-                pn_value = self._stored[pn][0]
+                pn_value = (self._stored[pn][0],self._stored[pn][2])
                 if len(pn_keys)>0:
                     pn_keys = pn_keys[0]
                 # pick up ordering keys
@@ -986,11 +1034,11 @@ that has been output. ::
                     if pn_keys.index(ordering_key)!=len(pn_keys)-1:
                         raise ValueError, 'Only the final key can be an ordering key: %s in %s for name %s' % (ordering_key,`pn_keys`,pn)
                     pn_keys = pn_keys[:-1]
-                pn_key_vals = [self._stored[k][0] for k in pn_keys]+[pn_value]
+                pn_key_vals = [(self._stored[k][0],self._stored[k][2]) for k in pn_keys]+[pn_value]
                 tree_for_output = self.create_tree(pn_key_vals,max_depth=len(pn_keys))
                 tree_for_ordering = tree_for_output
                 if ordering_key is not None:   #need to sort
-                    pn_key_vals[-1] = self._stored[ordering_key][0]
+                    pn_key_vals[-1] = (self._stored[ordering_key][0],None)
                     tree_for_ordering = self.create_tree(pn_key_vals,max_depth=len(pn_keys))
                 # now we need to output by traversing our output tree
                 self.output_tree(self.current_entry,pn_keys+(pn,),tree_for_output,tree_for_ordering)
