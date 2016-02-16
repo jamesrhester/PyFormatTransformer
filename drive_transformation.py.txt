@@ -279,6 +279,7 @@ name to the generic equivalent. ::
             "_goniometer_axis.offset[2]":"_goniometer axis offset Y component",
             "_goniometer_axis.offset[3]":"_detector axis offset Z component",
             "_detector_axis.id":"detector axis id",
+            "_detector_axis.key":"detector axis full id",
             "_detector_axis.vector":"detector axis vector",
             "_detector_axis.offset":"detector axis offset",
             "_detector_axis.offset_convention2":"detector axis offset mcstas",
@@ -455,7 +456,10 @@ has to be set when the packet is created. ::
             k = self.key
             if not c.has_key(att_name):
                 print "===Deriving item %s for packet" % att_name
-                result = d.derive_item(att_name,c,store_value=True,allow_defaults=False)
+                try:
+                    result = d.derive_item(att_name,c,store_value=True,allow_defaults=False)
+                except StarFile.StarDerivationError:
+                    result = None
                 if result is None:   #try with defaults
                     d.derive_item(att_name,c,store_value=True,allow_defaults=True)
                 print "===Finished packet derivation for %s" % att_name
