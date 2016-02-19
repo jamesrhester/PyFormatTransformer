@@ -71,12 +71,16 @@ dREL methods only operate on those rows that match the criteria.
                 print "=== Deriving %s as not found in datafile" % name
                 result = self.dictionary.derive_item(name,self,allow_defaults=False)
                 if result is None:
+                    print '===Trying to derive %s again with defaults allowed' % name
                     result = self.dictionary.derive_item(name,self,allow_defaults=True)
                 if result is not None and not (isinstance(result,list) and None in result):
                     self[name] = result
                     print "===Successfully derived %s = %s" % (name,result)
                 else:
                     print 'Warning: derivation of %s failed' % name
+            elif result is not None:
+                print "Stored %s for %s" % (result,name)
+                self[name] = result
             return result
             
         def __setitem__(self,name,value):
@@ -85,8 +89,10 @@ dREL methods only operate on those rows that match the criteria.
                 raise ValueError, "Attempt to set None value for %s" % name
             if not hasattr(value,'__iter__'):
                 print 'Setting %s to %s' % (name,value)
-            else:
+            elif len(value)>10:
                 print 'Setting %s to list' % name
+            else:
+                print 'Setting %s to %s' % (name,str(value))
             super(GenericInput,self).__setitem__(name,value)
 
         def has_key(self,name):
@@ -149,7 +155,7 @@ combination of values is given a separate data unit. ::
 Figuring out which names should not be array-valued
 ---------------------------------------------------
 
-We take responsibility for supplying the format adapter with a non-list-valued item when
+We take responsibility for supplying the format adapter with a singleton-list-valued item when
 we have sliced and diced.  We need to check for linked items as well. So we find out the
 category key(s), and see where they are linked to. A key is only single-valued if the key
 that it points to is single-valued, or the key itself is specified as single-valued.  ::
@@ -238,12 +244,13 @@ name to the generic equivalent. ::
             "_diffrn_radiation_wavelength.id":"wavelength id",
             "_diffrn_scan.date_start":"start time",
             "_diffrn_source.current":"source current",
-            "_simple_array_axis.id":"detector axis id",
-            "_simple_array_axis.vector":"detector axis vector",
-            "_simple_array_axis.offset":"detector axis offset",
-            "_simple_array_axis.vector_convention2":"detector axis vector mcstas",
-            "_simple_array_axis.offset_convention2":"detector axis offset mcstas",
-            "_simple_array_axis.type":"detector axis type",
+            "_detector_axis_uncoupled.id":"simple detector axis id",
+            "_detector_axis_uncoupled.vector":"simple detector axis vector",
+            "_detector_axis_uncoupled.offset":"simple detector axis offset",
+            "_detector_axis_uncoupled.vector_convention2":"simple detector axis vector mcstas",
+            "_detector_axis_uncoupled.offset_convention2":"simple detector axis offset mcstas",
+            "_detector_axis_uncoupled.type":"simple detector axis type",
+            "_detector_axis_uncoupled.key":"simple detector axis key",
             "_array_structure_list.id":"unique array direction identifier",
             "_array_structure_list.array_id":"array structure array identifier",
             "_array_structure_list.axis_set_id":"array structure axis set",
@@ -251,7 +258,9 @@ name to the generic equivalent. ::
             "_array_structure_list.precedence":"array axis set precedence",
             "_array_structure_list_axis.axis_set_id":"detector axis set id",
             "_array_structure_list_axis.axis_id":"detector axis set component axis",
+            "_array_structure_list.coupling_number":"number of coupled axes",
             "_axis.id":"axis id",
+            "_axis.key":"axis key",
             "_axis.vector":"axis vector",
             "_axis.offset":"axis offset",
             "_axis.offset_convention2":"axis offset mcstas",
@@ -271,13 +280,13 @@ name to the generic equivalent. ::
             "_goniometer_axis.offset_convention2":"goniometer axis offset mcstas",
             "_goniometer_axis.vector_convention2":"goniometer axis vector mcstas",
             "_goniometer_axis.type":"_goniometer axis type",
-            "_goniometer_axis.depends_on":"_goniometer axis depends on",
-            "_goniometer_axis.vector[1]":"_goniometer axis vector X component",
-            "_goniometer_axis.vector[2]":"_goniometer axis vector Y component",
-            "_goniometer_axis.vector[3]":"_goniometer axis vector Z component",
-            "_goniometer_axis.offset[1]":"_goniometer axis offset X component",
-            "_goniometer_axis.offset[2]":"_goniometer axis offset Y component",
-            "_goniometer_axis.offset[3]":"_detector axis offset Z component",
+            "_goniometer_axis.depends_on":"goniometer axis depends on",
+            "_goniometer_axis.vector[1]":"goniometer axis vector X component",
+            "_goniometer_axis.vector[2]":"goniometer axis vector Y component",
+            "_goniometer_axis.vector[3]":"goniometer axis vector Z component",
+            "_goniometer_axis.offset[1]":"goniometer axis offset X component",
+            "_goniometer_axis.offset[2]":"goniometer axis offset Y component",
+            "_goniometer_axis.offset[3]":"detector axis offset Z component",
             "_detector_axis.id":"detector axis id",
             "_detector_axis.key":"detector axis full id",
             "_detector_axis.vector":"detector axis vector",
@@ -285,15 +294,16 @@ name to the generic equivalent. ::
             "_detector_axis.offset_convention2":"detector axis offset mcstas",
             "_detector_axis.vector_convention2":"detector axis vector mcstas",
             "_detector_axis.type":"_detector axis type",
-            "_detector_axis.depends_on":"_detector axis depends on",
-            "_detector_axis.vector[1]":"_detector axis vector X component",
-            "_detector_axis.vector[2]":"_detector axis vector Y component",
-            "_detector_axis.vector[3]":"_detector axis vector Z component",
-            "_detector_axis.offset[1]":"_detector axis offset X component",
-            "_detector_axis.offset[2]":"_detector axis offset Y component",
-            "_detector_axis.offset[3]":"_detector axis offset Z component",
-            "_scan_array_data.array_data":"full simple data",
-            "_scan_array_data.scan_id":"full simple data scan id",
+            "_detector_axis.depends_on":"detector axis depends on",
+            "_detector_axis.vector[1]":"detector axis vector X component",
+            "_detector_axis.vector[2]":"detector axis vector Y component",
+            "_detector_axis.vector[3]":"detector axis vector Z component",
+            "_detector_axis.offset[1]":"detector axis offset X component",
+            "_detector_axis.offset[2]":"detector axis offset Y component",
+            "_detector_axis.offset[3]":"detector axis offset Z component",
+            "_detector_axis.coupled":"detector axis is coupled",
+            #"_scan_array_data.array_data":"full simple data",
+            #"_scan_array_data.scan_id":"full simple data scan id",
             "_diffrn_scan.id":"scan id",
             "_diffrn_scan.frames":"number of frames",
             "_diffrn_scan.number_of_scanned_axes":"number of scanned axes",
@@ -302,6 +312,7 @@ name to the generic equivalent. ::
             "_diffrn_scan_simple_frames.frame_id":"simple scan frame frame id",
             "_diffrn_scan_simple_frames.scan_id":"simple scan frame scan id",
             "_diffrn_scan_simple_frames.id":"simple scan frame unique identifier",
+            "_diffrn_scan_simple_frames.array_data":"simple scan data",
             "_diffrn_scan_simple_goniometer_axis.positions":"simple scan goniometer axis positions",
             "_diffrn_scan_simple_goniometer_axis.axis_id":"simple scan goniometer axis name",
             "_diffrn_scan_simple_goniometer_axis.scan_id":"simple scan goniometer axis scan id",
@@ -348,7 +359,7 @@ name to the generic equivalent. ::
             "_array_data.as_integers":"2D data",
             "_simple_data_axis.id":"data axis id",
             "_simple_data_axis.precedence":"data axis precedence",
-            "_simple_data_axis.scan_id":"data axis scan id"
+            "_simple_data_axis.scan_id":"data axis scan id",
             }
 
 Semantic packets

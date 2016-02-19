@@ -55,6 +55,7 @@ value has to be converted (units, list of restricted values, array creation)::
     "axis offset":["_axis.offset",None],
     "axis type":["_axis.type",None],
     "axis id":["_axis.id",None],
+    "axis equipment":["_axis.equipment",None],
     "detector axis set id":["_array_structure_list_axis.axis_set_id",None],
     "detector axis set component axis":["_array_structure_list_axis.axis_id",None],
     "axis vector X component":["_axis.vector[1]",None],

@@ -51,9 +51,9 @@ arrays to leaf nodes, so such an ordering must be the last member of
 any key that uses them. ::
     
     canonical_groupings = {('wavelength id',):['incident wavelength'],
-    ('detector axis id',):['detector axis vector mcstas','detector axis offset mcstas','detector axis type'],
+    ('simple detector axis id',):['simple detector axis vector mcstas','simple detector axis offset mcstas','simple detector axis type'],
     ('goniometer axis id',):['goniometer axis vector mcstas','goniometer axis offset mcstas','goniometer axis type'],
-    ('simple data frame id',):['simple data'],
+    ('simple scan frame frame id',):['simple scan data'],
     ('data axis id',):['data axis precedence'],
     ('goniometer location axis id', 'goniometer axis location frame id'):['goniometer axis angular position']
     }
@@ -126,13 +126,13 @@ The order is therefore:
             "incident wavelength":(["NXinstrument","NXmonochromator",],"wavelength",None,None),
             "probe":(["NXinstrument","NXsource"],"probe",self.convert_probe,None),
             "start time": ([],"@start_time","to be done",None),
-            "simple data":(["NXinstrument","NXdetector","NXdata"],"data",None,None),
+            "simple scan data":(["NXinstrument","NXdetector","NXdata"],"data",None,None),
             "goniometer axis id":(["NXsample","NXtransformation"],"",None,None),
             "goniometer axis vector mcstas":([],"@vector",None,None),
             "goniometer axis offset mcstas":([],"@offset",None,None),
-            "detector axis id":(["NXinstrument","NXdetector","NXtransformation"],"",None,None),
-            "detector axis vector mcstas":([],"@vector",None,None),
-            "detector axis offset mcstas":([],"@offset",None,None),
+            "simple detector axis id":(["NXinstrument","NXdetector","NXtransformation"],"",None,None),
+            "simple detector axis vector mcstas":([],"@vector",None,None),
+            "simple detector axis offset mcstas":([],"@offset",None,None),
             "goniometer axis angular position":([],"position",None,None),
             "simple scan frame scan id":([],"",None,None), # top level
             "__data_axis_info":(["NXinstrument","NXdetector","NXdata"],"data@axes",None,None),
@@ -165,7 +165,7 @@ table.  We expand the location and ordering tables to save checking each time. :
 
             self.equivalent_ids = {
             "goniometer axis id":["goniometer location axis id"],
-            "frame id":["goniometer axis location frame id","simple data frame id"]
+            "frame id":["goniometer axis location frame id","simple scan frame frame id"]
             }
 
             for k,i in self.equivalent_ids.items():
@@ -202,7 +202,7 @@ this list with the domain keys as well, but remove any that are auto-generated.
 Do not put domain keys into this list, as items in this list are output first
 and outputting keys requires careful expansion relative to the dependent names. ::
 
-            self.write_orders = {'simple data':['data axis precedence','data axis id'],
+            self.write_orders = {'simple scan data':['data axis precedence','data axis id'],
                  }
 
 Synthetic data
@@ -217,7 +217,16 @@ with each entry consisting of list of canonical names,creation function,extracti
 
             self.from_synthetic = set()
             [self.from_synthetic.update(n[0]) for n in self.synthetic_values.values()]
-            
+
+
+All known names
+---------------
+
+We construct a list of all known names to check against. ::
+
+            self.all_known_names = set(self.name_locations.keys()) | set(self.ordering_ids)
+            self.all_known_names.update(*[v[0] for v in self.synthetic_values.values()])
+
 Handling units
 --------------
 
@@ -706,7 +715,12 @@ the dependent values will be distributed between each class.) ::
 
         def set_by_name(self,name,value,value_type,units=None):
           """Set value of canonical [[name]] in datahandle"""
+          if not isinstance(value,(list,tuple,numpy.ndarray)) and name not in self.get_single_names():
+             raise ValueError, 'All values must be lists,tuples or arrays: passed %s for %s' % (value,name)
+          if name not in self.all_known_names:
+             raise ValueError, 'Name %s not recognised' % name
           self._stored[name] = (value,value_type,units)
+          print 'NX: stored %s:' % name + `self._stored[name]` 
 
         def partition(self,first_array,second_array):
             """Partition the second array into segments corresponding to identical values of the 
