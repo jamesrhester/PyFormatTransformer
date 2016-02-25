@@ -139,7 +139,7 @@ combination of values is given a separate data unit. ::
             for can_name in data_unit_spec:    #single-valued
                 can_vals = self.get_by_canonical_name(can_name)
                 if can_vals is not None and len(can_vals)>=1:
-                    multi_vals[can_name] = can_vals
+                    multi_vals[can_name] = set(can_vals)  #unique values
             # create a schedule: an array of values taken by each dataname
             schedule = {}
             for one_name in multi_vals.keys():
@@ -313,6 +313,8 @@ name to the generic equivalent. ::
             "_diffrn_scan_simple_frames.scan_id":"simple scan frame scan id",
             "_diffrn_scan_simple_frames.id":"simple scan frame unique identifier",
             "_diffrn_scan_simple_frames.array_data":"simple scan data",
+            "_diffrn_scan_simple_frames.array_id":"simple scan frame array id",
+            "_diffrn_scan_simple_frames.binary_id":"simple scan data binary id",
             "_diffrn_scan_simple_goniometer_axis.positions":"simple scan goniometer axis positions",
             "_diffrn_scan_simple_goniometer_axis.axis_id":"simple scan goniometer axis name",
             "_diffrn_scan_simple_goniometer_axis.scan_id":"simple scan goniometer axis scan id",
@@ -407,7 +409,7 @@ straighforward lookup. ::
             """Return a packet that provides the corresponding values of [[all_names]] where
             keyname == keyvalue"""
             key_vals = self[keyname]
-            key_pos = self[keyname].index(keyvalue)
+            key_pos = list(self[keyname]).index(keyvalue)
             out_packet = Packet(self.dictionary,self)
             for one_name in all_names:
                 if self.has_key(one_name):
@@ -523,6 +525,7 @@ This routine is responsible for overall control of the transformation. ::
             must_be_single = [n for n in all_names if generic.find_singleton(output_schedule.keys(),n)]
             print 'Single-valued: ' + `must_be_single`
             for single_data_unit in range(len(output_schedule[output_schedule.keys()[0]])):
+                print 'Creating data unit for value %s' % output_schedule[output_schedule.keys()[0]]
                 out_unit = out_module.create_data_unit()
                 filter_names = output_schedule.keys()
                 [generic.add_filter(k,output_schedule[k]) for k in filter_names]

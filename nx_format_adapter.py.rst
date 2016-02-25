@@ -55,7 +55,7 @@ any key that uses them. ::
     ('goniometer axis id',):['goniometer axis vector mcstas','goniometer axis offset mcstas','goniometer axis type'],
     ('simple scan frame frame id',):['simple scan data'],
     ('data axis id',):['data axis precedence'],
-    ('goniometer location axis id', 'goniometer axis location frame id'):['goniometer axis angular position']
+    ('frame axis location axis id', 'frame axis location frame id'):['frame axis location angular position']
     }
 
 
@@ -133,7 +133,8 @@ The order is therefore:
             "simple detector axis id":(["NXinstrument","NXdetector","NXtransformation"],"",None,None),
             "simple detector axis vector mcstas":([],"@vector",None,None),
             "simple detector axis offset mcstas":([],"@offset",None,None),
-            "goniometer axis angular position":([],"position",None,None),
+            "frame axis location axis id":(["NXtransformation"],"",None,None),
+            "frame axis location angular position":([],"position",None,None),
             "simple scan frame scan id":([],"",None,None), # top level
             "__data_axis_info":(["NXinstrument","NXdetector","NXdata"],"data@axes",None,None),
             }
@@ -165,7 +166,7 @@ table.  We expand the location and ordering tables to save checking each time. :
 
             self.equivalent_ids = {
             "goniometer axis id":["goniometer location axis id"],
-            "frame id":["goniometer axis location frame id","simple scan frame frame id"]
+            "frame id":["frame axis location frame id","simple scan frame frame id"]
             }
 
             for k,i in self.equivalent_ids.items():
@@ -200,10 +201,14 @@ to be written first.  Each entry in this dict is a canonical name: the value is
 a list of canonical names that can only be written after the key name.  We augment
 this list with the domain keys as well, but remove any that are auto-generated.
 Do not put domain keys into this list, as items in this list are output first
-and outputting keys requires careful expansion relative to the dependent names. ::
+and outputting keys requires careful expansion relative to the dependent names.
+These dependencies should be interpreted as simple ordering, and output may
+proceed even if an item is missing. This is so an item that depends on one of
+many possible items being present can still be output. ::
 
             self.write_orders = {'simple scan data':['data axis precedence','data axis id'],
-                 }
+                                 'detector axis vector mcstas':['frame axis location angular position'],
+                                 'goniometer axis vector mcstas':['frame axis location angular position'],}
 
 Synthetic data
 --------------
@@ -259,7 +264,9 @@ Obtaining values
 ================
 
 NeXus defines "classes" which are found in the attributes of
-an HDF5 group. ::
+an HDF5 group. Note that the following uses the recursive "walk"
+method, so any NX files which invert the expected class hierarchy
+will fail dismally - as we think they should. ::
 
         def get_by_class(self,parent_group,classname):
            """Return all groups in parent_group with class [[classname]]"""
@@ -559,7 +566,9 @@ case that these keys are in the range of a function of other keys. ::
 Obtaining values of groups.  We find the common name in [[name_locations]] and then trip
 down the class hierarchy, collecting all groups matching the list of groups.  We return
 all of the names, together with the group objects. Only the last group should have
-multiple values, as otherwise the upper groups would themselves be keys. ::
+multiple values, as otherwise the upper groups would themselves be keys. A value of
+"*" as the first group means that all groups of the next type should be found at
+whatever position they occur. ::
 
         def get_group_values(self,name,parent_group=None):
               """Use our lookup table to get the value of group name relative to parent group"""
@@ -575,19 +584,22 @@ multiple values, as otherwise the upper groups would themselves be keys. ::
                   return None
               nxclassloc,property,convert_function,dummy = nxlocation
               # catch the reference to the entry name itself
-              if len(nxclassloc) == 0 or property!= "":
-                  raise ValueError, 'Group-valued name has no class or else field/attribute name is set:' + `name`
+              if property!= "":
+                  raise ValueError, 'Group-valued name has field/attribute name set:' + `name`
               upper_classes = list(nxclassloc)
               upper_classes.reverse()
-              while len(upper_classes)>1:
+              new_classes = [upper_group]
+              if len(upper_classes)>0:
+                while len(upper_classes)>1:
                   target_class = upper_classes.pop()
+                  if target_class == "*": target_class = target_classes.pop() #ignored
                   new_classes = self.get_by_class(upper_group,target_class)
                   if len(new_classes)>1:   #still more to come
                       raise ValueError, 'Multiple groups found of type %s but only one expected: %s' % (target_class,new_classes)
                   elif len(new_classes)==0: #nothing there
                       return None
                   upper_group = new_classes[0]
-              new_classes = self.get_by_class(new_classes[0],upper_classes[0])
+                new_classes = self.get_by_class(new_classes[0],upper_classes[0])
               if len(new_classes)==0:
                   return None   
               all_values = [s.nxname for s in new_classes]
@@ -630,6 +642,11 @@ performed when the 'is_ordering' flag is set in the 'get_sub_tree' call. ::
               if key_tree is None:
                   raise ValueError, 'No tree found for key list ' + `all_keys`
               print 'NX: found key tree ' + `key_tree`
+              # now uncompress any single values
+              if ordering_key is not None:
+                  maxlen = self.get_leaf_length(key_tree)
+                  print 'Found maximum leaf length of %d' % maxlen
+                  self.uncompress_tree(key_tree,ordering_tree,maxlen)
               final_arrays = []
               [final_arrays.append([]) for k in all_keys]  #to avoid pointing to the same list
               length,units_array = self.synthesize_values(final_arrays,key_tree)
@@ -647,7 +664,9 @@ performed when the 'is_ordering' flag is set in the 'get_sub_tree' call. ::
 
 This recursive routine creates a tree structure from the NX file. If do_ordering is True,
 a parallel ordering tree is created, and if it is False, any array-valued items are
-considered to be vectors and provided with an extra level of encapsulation. ::
+considered to be vectors and provided with an extra level of encapsulation.  If uncompress
+is True and we have an ordering, we expand out any single values by repeating them to
+the length of the maximum-length leaf node encountered. ::
 
         def get_sub_tree(self,parent_group,keynames,do_ordering=False):
               """Get the key tree underneath parent_group, or return an ordering
@@ -674,6 +693,46 @@ considered to be vectors and provided with an extra level of encapsulation. ::
                       sub_dict[another_key] = (new_tree,units)
                       ordering_dict[another_key] = (ordering_tree,None)
               return sub_dict,None, ordering_dict
+
+A utility routine to find the length of the leaf nodes in the given tree, remembering that
+each leaf is a (value,units) tuple. ::
+
+        def get_leaf_length(self,target_tree):
+            maxlen = 0
+            if isinstance(target_tree,dict):
+                for k in target_tree.keys():
+                    maxlen = max(self.get_leaf_length(target_tree[k]),maxlen)
+            else:
+                try:
+                    maxlen = len(target_tree[0])
+                except TypeError:
+                    print 'Warning, unable to determine length of ' + `target_tree[0]`
+                    maxlen = 1
+            return maxlen
+
+A utility routine to expand out any leaf nodes of length one by repeating that value
+to the maximum number of entries. ::
+
+        def uncompress_tree(self,target_tree,ordering_tree,target_length):
+            if isinstance(target_tree,dict):
+                for k in target_tree.keys():
+                    test_val = target_tree[k]
+                    if isinstance(test_val,tuple):
+                      if isinstance(test_val[0],list):
+                        if len(test_val[0])== 1:
+                            print 'Expanding ' + `test_val`
+                            target_tree[k] = (list(test_val[0])*target_length,test_val[1])
+                            ordering_tree[k] = (self.make_id(target_tree[k][0]),None)
+                      elif isinstance(test_val[0],numpy.ndarray):
+                        if test_val[0].size == 1:
+                            print 'Expanding ' + `test_val`
+                            target_tree[k] = (list(numpy.atleast_1d(test_val[0]))*target_length,test_val[1])
+                            ordering_tree[k] = (self.make_id(target_tree[k][0]),None)
+                    else:
+                        for k in target_tree.keys():
+                            self.uncompress_tree(target_tree[k],ordering_tree[k],target_length)
+            else:
+                print 'Warning: uncompress dropped off end with value ' + `target_tree`
 
 When putting together arrays from a key tree, we assume that each entry in our tree will
 have units attached, which we harvest out and assume to be identical. ::
@@ -719,7 +778,10 @@ the dependent values will be distributed between each class.) ::
              raise ValueError, 'All values must be lists,tuples or arrays: passed %s for %s' % (value,name)
           if name not in self.all_known_names:
              raise ValueError, 'Name %s not recognised' % name
-          self._stored[name] = (value,value_type,units)
+          if name in self.get_single_names() and not isinstance(value,list):
+              self._stored[name] = ([value],value_type,units)
+          else:
+              self._stored[name] = (value,value_type,units)
           print 'NX: stored %s:' % name + `self._stored[name]` 
 
         def partition(self,first_array,second_array):
@@ -739,15 +801,14 @@ The following recursive routine creates a tree from equal length arrays.  The ou
 the form of a python dictionary, has unique nodes at each level corresponding to the unique
 values found in each supplied array. The construction is such
 that the final leaf of the tree will be an array of elements. As NeXus allows a sequence of
-three values to be interpreted as a single vector value, rather than a sequence of values, we should remove a dimension from
+three values to be interpreted as a single vector value (rather than a sequence of values), we should remove a dimension from
 those elements that represent a single vector rather than a sequence of (3) values. Trees
 created by this routine and get_sub_tree encapsulate these vectors in an extra layer; on
 output of such trees, this layer is removed if an ordering key is not used. ::
-                                                                                        
+
         def create_tree(self,start_arrays,current_depth=0, max_depth=None):
             """Return a tree created by partitioning each array into unique elements, with
-            each subsequent array being the next level in the tree. When the final arrays
-            have end_length elements the partitioning stops. Each element in start_arrays
+            each subsequent array being the next level in the tree. Each element in start_arrays
             is a two-element tuple ([values], units). """
             check_len = set([len(a) for a in start_arrays])
             if check_len != set([2]):
@@ -756,7 +817,7 @@ output of such trees, this layer is removed if an ordering key is not used. ::
             print 'Creating a tree to depth %s from %s' % (`max_depth`,`start_arrays`)
             if current_depth == max_depth or \
                max_depth is None and len(start_arrays)==1:   #termination criterion
-                   return start_arrays[0]
+                return start_arrays[0]
             partitioned = [self.partition(start_arrays[0],a) for a in start_arrays[1:]]
             part_arrays = zip(*[a[0] for a in partitioned])
             sub_tree = dict(zip(partitioned[0][1],[self.create_tree(p,current_depth+1,max_depth) for p in part_arrays]))
@@ -780,9 +841,11 @@ differ from value_tree.  Both trees are traversed in parallel, and when a leaf n
 reached, the output values are sorted into a canonical order and the ordering key then
 'disappears' and is recreated when reading in. If an ordering key is not used, any
 sequence (i.e. list) items used as output items must be vectors and one level of
-encapsulation is removed. ::
+encapsulation is removed.  If compression is enabled (compress=True) and an ordering
+tree is used, any leaf nodes consisting of identical values are reduced to a single
+value. ::
 
-        def output_tree(self,parent_group,names,value_tree,ordering_tree):
+        def output_tree(self,parent_group,names,value_tree,ordering_tree,compress=False):
             """Output a tree of values, with each level corresponding to values in [names]"""
             sort_order = None
             print 'Outputting tree: ' + `value_tree` + ' with ordering ' + `ordering_tree`
@@ -791,12 +854,18 @@ encapsulation is removed. ::
             if isinstance(value_tree,dict):
                 for one_key in value_tree.keys():
                     child_group = self.store_a_group(parent_group,names[0],one_key,self._stored[names[0]][1],self._stored[names[0]][2])
-                    self.output_tree(child_group,names[1:],value_tree[one_key],ordering_tree[one_key])
+                    self.output_tree(child_group,names[1:],value_tree[one_key],ordering_tree[one_key],compress)
             else:   #we are at the bottom level
                 # shortcut for single values
                 if ordering_tree != value_tree and (isinstance(value_tree[0],list) and len(value_tree[0])>1):
                     print 'Found ordering tree: %s for %s' % (`ordering_tree`,`value_tree`)
                     output_order,sort_order = self.create_index(ordering_tree[0],value_tree[0])
+                    if compress:    #identical values removed
+                        print 'Trying to compress:' + `output_order`
+                        if len(set(output_order))==1:
+                            output_order = [output_order[0],]
+                        else:
+                            print 'Unable to compress, %d distinct values' % len(set(output_order))
                 else:
                     output_order,sort_order = value_tree[0][0],None
                 self.store_a_value(parent_group,names[0],output_order,self._stored[names[0]][1],self._stored[names[0]][2])
@@ -883,6 +952,9 @@ sign).  ::
 Utility routine to select/create a group
 ----------------------------------------
 
+The location is a list of hierarchical NXclasses which are stepped through to find
+the ultimate single group.  This cannot be used for situations in which multiple
+groups are possible. 
 ::
 
         def _find_group(self,location,start_group,create=True):
@@ -972,8 +1044,9 @@ that we can order the values in each branch of the tree correctly. ::
                 # check our id dependencies
                 [wait_names.update(list(k)) for k in self.domain_names.keys() if name in self.domain_names[k]]
             waiting = (priority_names | wait_names) - output_names
+            priority_names = priority_names - waiting #drop missing ones
             if len(waiting)>0:
-                raise ValueError, "Following IDs not found but needed in order to output:" + `waiting`
+                print "Warning: following IDs not found but might be needed in order to output:" + `waiting`
             # create any synthetic names
             for synth_name,synth_methods in self.synthetic_values.items():
                 external_names,create_meth,dummy = self.synthetic_values[synth_name]
@@ -1055,9 +1128,10 @@ that has been output. ::
                     pn_key_vals[-1] = (self._stored[ordering_key][0],None)
                     tree_for_ordering = self.create_tree(pn_key_vals,max_depth=len(pn_keys))
                 # now we need to output by traversing our output tree
-                self.output_tree(self.current_entry,pn_keys+(pn,),tree_for_output,tree_for_ordering)
+                self.output_tree(self.current_entry,pn_keys+(pn,),tree_for_output,tree_for_ordering,
+                                 compress=ordering_key is not None)
                 # remove names from list
-                output_names.remove(pn)
+                output_names.discard(pn)
                 output_names.difference_update(pn_keys)
                 output_names.discard(ordering_key)
 

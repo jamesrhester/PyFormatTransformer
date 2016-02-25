@@ -42,7 +42,7 @@ value has to be converted (units, list of restricted values, array creation)::
 
     canonical_groupings = {'wavelength id':['incident wavelength'],
     'axis id':['axis vector','axis offset','axis type'],
-    'full simple data scan id':['2D data']
+    '2D data identifier':['2D data']
     }
 
     canonical_name_locations = {

@@ -1,0 +1,184 @@
+#\#CIF_2.0
+#DDLm dictionary edited in DDLm-authortools
+data_CATEGORY_CONSTRUCT_DIC
+
+_dictionary.title                       category_contruct_dic
+_dictionary.version                     1.1
+_dictionary.ddl_conformance             3.11.04
+_dictionary.class                       Reference
+_dictionary.namespace                   ?
+_description.text                       
+;
+
+    Additional DDLm attributes describing how to construct categories
+
+;
+_dictionary.date                        2016-02-25
+loop_
+  _dictionary_audit.version
+  _dictionary_audit.date
+  _dictionary_audit.revision
+         1.0       2016-02-26          'First version (James Hester)'          
+         1.1       2016-02-25          "Added '_local' to all attribute names in accordance with IUCr policy(James Hester)()()"
+
+save_CATEGORY_CONSTRUCT_HEAD
+
+_definition.id                          CATEGORY_CONSTRUCT_HEAD
+_definition.scope                       Category
+_definition.class                       Head
+_description.text                       'Parent category for all other categories'
+_name.object_id                         CATEGORY_CONSTRUCT_HEAD
+_import.get [{'if_dupl':Ignore  'save':ATTRIBUTES  'mode':Full  'file':ddl.dic  
+              'if_miss':Exit}]
+
+save_
+
+
+save_category_construct_local
+
+_definition.id                          category_construct_local
+_definition.scope                       Category
+_definition.class                       Set
+_definition.update                      2015-12-07
+_description.text                       
+;
+     The attributes used to specify how a category may be constructed from other
+     categories. It differs from a category method in that it describes
+     mathematical relationships between whole categories that can be used to construct new
+     instances of a category together with datanames inherited from the starting
+     categories.
+;
+_name.category_id                       ATTRIBUTES
+_name.object_id                         category_construct_local
+
+save_
+
+
+save_category_construct_local.text_filter
+
+_definition.id                          '_category_construct_local.text_filter'
+_definition.class                       Attribute
+_definition.update                      2015-12-07
+_description.text                       
+;
+     The list of text strings against which values will be filtered.
+;
+_name.category_id                       category_construct_local
+_name.object_id                         text_filter
+_type.purpose                           State
+_type.source                            Assigned
+_type.container                         List
+_type.dimension [*]
+_type.contents                          Text
+
+save_
+
+
+save_category_construct_local.integer_filter
+
+_definition.id                          '_category_construct_local.integer_filter'
+_definition.class                       Attribute
+_definition.update                      2015-12-07
+_description.text                       
+;
+     The list of integers against which values will be filtered.
+;
+_name.category_id                       category_construct_local
+_name.object_id                         integer_filter
+_type.purpose                           State
+_type.source                            Assigned
+_type.container                         List
+_type.dimension [*]
+_type.contents                          Integer
+
+save_
+
+
+save_category_construct_local.type
+
+_definition.id                          '_category_construct_local.type'
+_definition.class                       Attribute
+_definition.update                      2015-12-07
+_description.text                       
+;
+     The mathematical relationship used to construct this category
+;
+_name.category_id                       category_construct_local
+_name.object_id                         type
+_type.purpose                           State
+_type.source                            Assigned
+_type.container                         Single
+_type.contents                          Code
+loop_
+  _enumeration_set.state
+  _enumeration_set.detail
+         Pullback  
+;                 The two datanames listed in _category_construct.components
+                  are used to construct a 'pullback' ('fibre product') as 
+                  follows: let A be the category of dataname 1, B the category
+                  of dataname 2, and C the type of values that both dataname 1
+                  and dataname 2 must take. Then the pullback category is a list of
+                  pairs of elements drawn from (AxB) such that the value 
+                  of dataname 1 equals the value of dataname 2 for the respective
+                  elements in the pullback.  The pullback category inherits all
+                  datanames of its component categories unless there is a name
+                  collision.
+;        
+         Filter    
+;
+                  One dataname and a list of constant integer or text values are used to filter the
+                  values of the dataname. Only values of the dataname contained
+                  in the list are included in the created category. The filtered category
+                  inherits all datanames of the original category.
+; 
+
+save_
+
+
+save_category_construct_local.new_ids
+
+_definition.id                          '_category_construct_local.new_ids'
+_definition.class                       Attribute
+_definition.update                      2015-12-07
+_description.text                       
+;
+     After category construction, the datanames which link the new
+     category to the old categories.  These datanames must be specified as keys
+     of the new category, and the order of the datanames must match the
+     order given in _category_construct_local.components, that is, the first entry in
+     new_id must refer to a dataname that links to the category that the first
+     dataname in _category_construct_local.components belongs to. For 'Filter' types,
+     only the first dataname is required.
+;
+_name.category_id                       category_construct_local
+_name.object_id                         new_ids
+_type.purpose                           State
+_type.source                            Assigned
+_type.container                         Multiple
+_type.dimension [2]
+_type.contents                          Name
+
+save_
+
+
+save_category_construct_local.components
+
+_definition.id                          '_category_construct_local.components'
+_definition.class                       Attribute
+_definition.update                      2015-12-07
+_description.text                       
+;
+     The datanames used to calculate the members of a category. For 'Pullback'
+     relationships, both datanames must take values from the same set (e.g.
+     integers or category identifiers).  For 'Filter' relationships, only
+     one dataname should be given.
+;
+_name.category_id                       category_construct_local
+_name.object_id                         components
+_type.purpose                           State
+_type.source                            Assigned
+_type.container                         Multiple
+_type.dimension [*]
+_type.contents                          Name
+
+save_
