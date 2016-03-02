@@ -9,3 +9,6 @@ programs: nx_format_adapter.py cif_format_adapter.py drive_transformation.py cre
 #
 %.py: %.py.txt
 	./pylit.py -t $<
+#
+clean:
+	rm *.pyc

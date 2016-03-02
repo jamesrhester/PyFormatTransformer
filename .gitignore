@@ -1,0 +1,8 @@
+*.py
+*.pyc
+*~
+cbf_scratch.cif
+\#*
+parser.out
+images
+*.lst
