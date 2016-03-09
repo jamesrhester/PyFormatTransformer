@@ -24,8 +24,7 @@ handling.  Because pycbf requires initialising from the filename, but
 is called from within a pycifrw CifBlock structure, we have to carry
 along our file location and blockname in our data object, which we
 simply do using the magic of Python dynamic assignment. ::
-  
-    import pycbf
+
     import numpy
     from CifFile import CifFile, CifBlock
     convert_probe = 'dummy'  #forward definition
@@ -95,7 +94,7 @@ value has to be converted (units, list of restricted values, array creation)::
     "simple scan frame key":["_diffrn_scan_simple_frame.key",None],
     "2D data identifier":["_array_data.binary_id",None],
     "2D data structure id":["_array_data.array_id",None],
-    "2D data":["_array_data.as_integers",None],
+    "2D data":["_array_data.as_integers_local",None],
     "array structure array identifier":["_array_structure_list.array_id",None],
     "unique array direction identifier":["_array_structure_list.id",None],
     "array axis set precedence":["_array_structure_list.precedence",None],
@@ -299,6 +298,7 @@ point is that such processing is handled only in this format
 adapter routine and nowhere else. ::
 
         def create_images(self):
+            import pycbf
             """Return a set of numpy image arrays for this file"""
             import numpy
             # for each image, get the array
@@ -341,6 +341,7 @@ pycbf to do the heavy lifting. This routine is called when each image is
 provided. ::
 
         def encode_images(self,one_image,binary_id):
+            import pycbf   #version 0.9.2 tested
             """Convert a 2D image array into a compressed string for storage, using
             binary_id as identifier (binary id should be an integer)."""
             import numpy,cStringIO

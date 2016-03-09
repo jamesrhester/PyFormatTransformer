@@ -68,7 +68,6 @@ _name.category_id                       DEMO_DIC_HEAD
 _name.object_id                         ARRAY_DATA
 _category.key_id                        '_array_data.binary_id'
 _category.key_list ['_array_data.binary_id']
-_name.linked_item_id                    ''
 loop_
   _method.purpose
   _method.expression
@@ -119,8 +118,6 @@ _type.purpose                           Measurand
 _type.source                            Recorded
 _type.container                         Array
 _type.contents                          Integer
-_name.linked_item_id                    ''
-
 save_
 
 
@@ -1132,7 +1129,6 @@ _type.source                            Assigned
 _type.container                         Single
 _type.contents                          Code
 _enumeration.default                    1
-_name.linked_item_id                    ''
 
 save_
 
@@ -2418,7 +2414,6 @@ _name.category_id                       axis
 _definition.class                       Datum
 _description.text 
                                         'The axis offset expressed in an alternate coordinate system where Z points along the beam away from the source.'
-_name.linked_item_id                    ''
 _type.purpose                           Number
 _type.source                            Recorded
 _type.container                         Array
@@ -2674,7 +2669,6 @@ _name.category_id                       axis
 _definition.class                       Datum
 _description.text 
                                         'The axis vector expressed in an alternate coordinate system where Z points along the beam away from the source.'
-_name.linked_item_id                    ''
 _type.purpose                           Number
 _type.source                            Recorded
 _type.container                         Array
@@ -2705,10 +2699,10 @@ attached to detectors. This category is a filtered version of the AXIS
 category that includes only detector axes.
 ;
 _category.key_id                        '_detector_axis.key'
-_category_construct.type                Filter
-_category_construct.text_filter [detector]
-_category_construct.components ['_axis.equipment']
-_category_construct.new_ids [key]
+_category_construct_local.type                Filter
+_category_construct_local.text_filter [detector]
+_category_construct_local.components ['_axis.equipment']
+_category_construct_local.new_ids [key]
 loop_
   _category_key.name
          '_detector_axis.key' 
@@ -2894,10 +2888,10 @@ _definition.scope                       Category
 _definition.class                       Loop
 _description.text                       'No definition provided'
 _category.key_id                        '_detector_axis_uncoupled.key'
-_category_construct.type                Filter
-_category_construct.text_filter [no]
-_category_construct.components ['_detector_axis.coupled']
-_category_construct.new_ids [key]
+_category_construct_local.type                Filter
+_category_construct_local.text_filter [no]
+_category_construct_local.components ['_detector_axis.coupled']
+_category_construct_local.new_ids [key]
 loop_
   _category_key.name
          '_detector_axis_uncoupled.key' 
@@ -3024,7 +3018,6 @@ _category.key_id                        '_diffrn_data_frame.key'
 _category.key_list ['_diffrn_data_frame.id'  
                    '_diffrn_data_frame.detector_element_id'  
                    '_diffrn_data_frame.scan_id']
-_name.linked_item_id                    ''
 
 save_
 
@@ -3271,9 +3264,6 @@ _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
 _type.contents                          Code
-_category_construct.components          ''
-_category_construct.new_ids             ''
-
 save_
 
 
@@ -3289,7 +3279,6 @@ _type.purpose                           Link
 _type.source                            Related
 _type.container                         Multiple
 _type.contents                          Code
-_category_construct.components          ''
 loop_
   _method.purpose
   _method.expression
@@ -3336,7 +3325,6 @@ _type.purpose                           Key
 _type.source                            Assigned
 _type.container                         Single
 _type.contents                          Code
-_category_construct.new_ids             ''
 
 save_
 
@@ -3356,8 +3344,6 @@ _type.purpose                           Key
 _type.source                            Assigned
 _type.container                         Multiple
 _type.contents                          Code
-_name.linked_item_id                    ''
-_category_construct.new_ids             ''
 loop_
   _method.purpose
   _method.expression
@@ -3408,7 +3394,6 @@ _name.category_id                       DEMO_DIC_HEAD
 _name.object_id                         DIFFRN_DETECTOR
 _category.key_id                        '_diffrn_detector.id'
 _category.key_list ['_diffrn_detector.diffrn_id'  '_diffrn_detector.id']
-_category_construct.components          ''
 loop_
   _category_key.name
          '_diffrn_detector.id' 
@@ -3462,7 +3447,6 @@ _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
 _type.contents                          Code
-_category_construct.components          ''
 
 save_
 
@@ -3510,7 +3494,6 @@ _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
 _type.contents                          Code
-_category_construct.components          ''
 
 save_
 
@@ -3559,7 +3542,6 @@ _type.purpose                           Number
 _type.source                            Derived
 _type.container                         Single
 _type.contents                          Integer
-_category_construct.components          ''
 
 save_
 
@@ -3757,7 +3739,6 @@ _type.purpose                           Key
 _type.source                            Derived
 _type.container                         Multiple
 _type.contents                          Text
-_category_construct.new_ids             ''
 loop_
   _method.purpose
   _method.expression
@@ -3883,12 +3864,11 @@ _category.key_id                        '_diffrn_detector_monolithic.id'
 loop_
   _category_key.name
          '_diffrn_detector_monolithic.id' 
-_name.linked_item_id                    ''
-_category_construct.type                Filter
-_category_construct.components ['_diffrn_detector.number_of_elements']
-_category_construct.filter [1]
-_category_construct.new_ids [id]
-_category_construct.integer_filter [1]
+_category_construct_local.type                Filter
+_category_construct_local.components ['_diffrn_detector.number_of_elements']
+_category_construct_local.filter [1]
+_category_construct_local.new_ids [id]
+_category_construct_local.integer_filter [1]
 
 save_
 
@@ -3917,14 +3897,11 @@ _definition.id                          diffrn_detector_monolithic_element
 _definition.scope                       Category
 _definition.class                       Loop
 _description.text                       'No definition provided'
-_category_construct.components ['_diffrn_detector_element.detector_id'  
+_category_construct_local.components ['_diffrn_detector_element.detector_id'  
                                '_diffrn_detector_monolithic.id']
-_category_construct.type                Pullback
-_category_construct.new_ids [key  detector_id]
+_category_construct_local.type                Pullback
+_category_construct_local.new_ids [key  detector_id]
 _category.key_id                        '_diffrn_detector_monolithic_element.key'
-_name.linked_item_id                    ''
-_category_construct.filter              ''
-
 save_
 
 
@@ -3935,12 +3912,10 @@ _name.object_id                         detector_id
 _name.category_id                       diffrn_detector_monolithic_element
 _definition.class                       Datum
 _description.text                       'PLEASE DEFINE ME'
-_category_construct.new_ids             ''
 _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
 _type.contents                          Text
-_name.linked_item_id                    ''
 
 save_
 
@@ -3952,7 +3927,6 @@ _name.object_id                         id
 _name.category_id                       diffrn_detector_monolithic_element
 _definition.class                       Datum
 _description.text                       'PLEASE DEFINE ME'
-_category_construct.components          ''
 _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
@@ -3973,8 +3947,6 @@ _type.purpose                           Key
 _type.source                            Derived
 _type.container                         Multiple
 _type.contents                          Code
-_name.linked_item_id                    ''
-_category_construct.new_ids             ''
 loop_
   _method.purpose
   _method.expression
@@ -5340,7 +5312,6 @@ _name.category_id                       DEMO_DIC_HEAD
 _name.object_id                         DIFFRN_SCAN_AXIS
 _category.key_id                        '_diffrn_scan_axis.key'
 _category.key_list ['_diffrn_scan_axis.scan_id'  '_diffrn_scan_axis.axis_id']
-_category_construct.new_ids             ''
 
 save_
 
@@ -5692,7 +5663,6 @@ _name.category_id                       DEMO_DIC_HEAD
 _name.object_id                         DIFFRN_SCAN_FRAME
 _category.key_id                        '_diffrn_scan_frame.key'
 _category.key_list ['_diffrn_scan_frame.scan_id'  '_diffrn_scan_frame.frame_id']
-_name.linked_item_id                    ''
 loop_
   _method.purpose
   _method.expression
@@ -6175,7 +6145,6 @@ _name.object_id                         DIFFRN_SCAN_FRAME_AXIS
 _category.key_id                        '_diffrn_scan_frame_axis.key'
 _category.key_list ['_diffrn_scan_frame_axis.frame_id'  
                    '_diffrn_scan_frame_axis.axis_id']
-_category_construct.new_ids             ''
 
 save_
 
@@ -6645,11 +6614,11 @@ _definition.class                       Loop
 _description.text 
                                         'This category provides information about scans consisting of identically-structured frames obtained by scanning a single axis.'
 _category.key_id                        '_diffrn_scan_simple.scan_id'
-_category_construct.new_ids [scan_id]
-_category_construct.type                Filter
-_category_construct.filter [1]
-_category_construct.components ['_diffrn_scan.number_of_scanned_axes']
-_category_construct.integer_filter [1]
+_category_construct_local.new_ids [scan_id]
+_category_construct_local.type                Filter
+_category_construct_local.filter [1]
+_category_construct_local.components ['_diffrn_scan.number_of_scanned_axes']
+_category_construct_local.integer_filter [1]
 
 save_
 
@@ -6666,7 +6635,6 @@ _type.source                            Related
 _type.container                         Single
 _type.contents                          Code
 _name.linked_item_id                    '_axis.id'
-_category_construct.new_ids             ''
 loop_
   _method.purpose
   _method.expression
@@ -6843,9 +6811,9 @@ _description.text
 frames with a single scan axis. 
 ;
 _category.key_id                        '_diffrn_scan_simple_frames.id'
-_category_construct.new_ids [id  scan_id]
-_category_construct.type                Pullback
-_category_construct.components ['_full_frame.scan_id'  
+_category_construct_local.new_ids [id  scan_id]
+_category_construct_local.type                Pullback
+_category_construct_local.components ['_full_frame.scan_id'  
                                '_diffrn_scan_simple.scan_id']
 loop_
   _category_key.name
@@ -6909,7 +6877,7 @@ _definition.id                          '_diffrn_scan_simple_frames.binary_id'
 _name.object_id                         binary_id
 _name.category_id                       diffrn_scan_simple_frames
 _definition.class                       Datum
-_description.text                       ''
+_description.text                       'PLEASE DEFINE ME'
 _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
@@ -6962,7 +6930,6 @@ _type.purpose                           Key
 _type.source                            Related
 _type.container                         Single
 _type.contents                          Text
-_category_construct.components          ''
 
 save_
 
@@ -6993,8 +6960,6 @@ _type.purpose                           Key
 _type.source                            Assigned
 _type.container                         Multiple
 _type.contents                          Text
-_name.linked_item_id                    ''
-_category_construct.components          ''
 loop_
   _method.purpose
   _method.expression
@@ -7021,7 +6986,6 @@ _type.purpose                           Key
 _type.source                            Assigned
 _type.container                         Single
 _type.contents                          Text
-_category_construct.components          ''
 _name.linked_item_id                    '_diffrn_scan.id'
 
 save_
@@ -7037,11 +7001,10 @@ _definition.class                       Loop
 _description.text 
                                         'Items in the full frame category describe data arrays from detectors consisting of a single element.'
 _category.key_id                        '_full_frame.id'
-_name.linked_item_id                    ''
-_category_construct.new_ids [id  detector_element_key]
-_category_construct.components ['_diffrn_data_frame.detector_element_key'  
+_category_construct_local.new_ids [id  detector_element_key]
+_category_construct_local.components ['_diffrn_data_frame.detector_element_key'  
                                '_diffrn_detector_monolithic_element.key']
-_category_construct.type                Pullback
+_category_construct_local.type                Pullback
 loop_
   _category_key.name
          '_full_frame.id' 
@@ -7060,7 +7023,6 @@ _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
 _type.contents                          Text
-_category_construct.components          ''
 
 save_
 
@@ -7089,7 +7051,6 @@ _name.object_id                         detector_element_id
 _name.category_id                       full_frame
 _definition.class                       Datum
 _description.text                       'PLEASE DEFINE ME'
-_category_construct.components          ''
 _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
@@ -7106,7 +7067,6 @@ _name.object_id                         detector_element_key
 _name.category_id                       full_frame
 _definition.class                       Datum
 _description.text                       'PLEASE DEFINE ME'
-_category_construct.new_ids             ''
 _type.purpose                           Link
 _type.source                            Related
 _type.container                         Multiple
@@ -7127,7 +7087,6 @@ _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
 _type.contents                          Text
-_name.linked_item_id                    ''
 loop_
   _method.purpose
   _method.expression
@@ -7151,9 +7110,6 @@ _type.purpose                           Key
 _type.source                            Assigned
 _type.container                         Single
 _type.contents                          Code
-_name.linked_item_id                    ''
-_category_construct.new_ids             ''
-_category_construct.components          ''
 loop_
   _method.purpose
   _method.expression
@@ -7177,7 +7133,6 @@ _type.purpose                           Link
 _type.source                            Related
 _type.container                         Single
 _type.contents                          Text
-_name.linked_item_id                    ''
 loop_
   _method.purpose
   _method.expression
@@ -7202,10 +7157,10 @@ _category.key_id                        '_goniometer_axis.id'
 loop_
   _category_key.name
          '_goniometer_axis.id' 
-_category_construct.type                Filter
-_category_construct.components ['_axis.equipment']
-_category_construct.text_filter [goniometer]
-_category_construct.new_ids [id]
+_category_construct_local.type                Filter
+_category_construct_local.components ['_axis.equipment']
+_category_construct_local.text_filter [goniometer]
+_category_construct_local.new_ids [id]
 
 save_
 

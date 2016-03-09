@@ -1,0 +1,31 @@
+loop_
+  _diffrn_radiation.wavelength_id
+  _diffrn_radiation.diffrn_id
+  _diffrn_radiation_wavelength.wavelength
+  _diffrn_radiation_wavelength.wt
+         L1        DS1       0.711955  1.0 
+loop_
+  _diffrn_scan.id
+  _diffrn_scan.frame_id_start
+  _diffrn_scan.frame_id_end
+  _diffrn_scan.frames
+         SCAN1     FRAME1    Frame5    5 
+loop_
+  _diffrn_measurement.diffrn_id
+  _diffrn_measurement.id
+  _diffrn_measurement.method
+  _diffrn_measurement.number_of_axes
+  _diffrn_measurement.sample_detector_distance
+         DS1       GONIOMETER          oscillation         1         72.1656 
+loop_
+  _diffrn_detector.id
+  _diffrn_detector.diffrn_id
+  _diffrn_detector.type
+  _diffrn_detector.details
+  _diffrn_detector.number_of_axes
+  _diffrn_detector.layer_thickness
+         ADSCQ210-SN457      DS1       'ADSC QUANTUM210'   'bin 2x2 hardware'  4        0.00000
+loop_
+  _diffrn_detector_element.id
+  _diffrn_detector_element.detector_id
+         ELEMENT1  ADSCQ210-SN457 

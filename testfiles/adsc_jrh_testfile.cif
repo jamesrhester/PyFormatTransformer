@@ -1,0 +1,217 @@
+#\#CIF_2.0
+
+##########################################################################
+#               Crystallographic Information Format file 
+#               Produced by PyCifRW module
+# 
+#  This is a CIF file.  CIF has been adopted by the International
+#  Union of Crystallography as the standard for data archiving and 
+#  transmission.
+#
+#  For information on this file format, follow the CIF links at
+#  http://www.iucr.org
+##########################################################################
+
+data_image_1
+
+_diffrn.id                              DS1
+_diffrn_source.diffrn_id                DS1
+_diffrn_source.source                   synchrotron
+_diffrn_source.type                     '  crystallography'
+_diffrn_radiation.diffrn_id             DS1
+loop_
+_diffrn_radiation_wavelength.id        
+_diffrn_radiation_wavelength.wavelength
+_diffrn_radiation_wavelength.wt         
+L1 0.711955 1.0
+
+_diffrn_measurement.diffrn_id           DS1
+_diffrn_measurement.id                  GONIOMETER
+_diffrn_measurement.method              oscillation
+_diffrn_measurement.number_of_axes      1
+_diffrn_measurement.sample_detector_distance                                    72.1174
+_diffrn_measurement_axis.measurement_id                                         GONIOMETER
+_diffrn_measurement_axis.axis_id        GONIOMETER_PHI
+loop_
+  _diffrn_scan.id
+  _diffrn_scan.frame_id_start
+  _diffrn_scan.frame_id_end
+  _diffrn_scan.frames
+         SCAN1     FRAME1    FRAME1    1 
+loop_
+  _diffrn_scan_axis.scan_id
+  _diffrn_scan_axis.axis_id
+  _diffrn_scan_axis.angle_start
+  _diffrn_scan_axis.angle_range
+  _diffrn_scan_axis.angle_increment
+  _diffrn_scan_axis.displacement_start
+  _diffrn_scan_axis.displacement_range
+  _diffrn_scan_axis.displacement_increment
+         SCAN1     GONIOMETER_PHI      180.00    20.00     20.00     0.00      0.00     0.00     
+         SCAN1     DETECTOR_Z          0.00      0.00      0.00      72.12     0.00     0.00     
+         SCAN1     DETECTOR_Y          0.00      0.00      0.00      0.00      0.00     0.00     
+         SCAN1     DETECTOR_X          0.00      0.00      0.00      0.00      0.00     0.00     
+         SCAN1     DETECTOR_PITCH      0.00      0.00      0.00      0.00      0.00     0.00
+loop_
+  _diffrn_scan_frame.scan_id
+  _diffrn_scan_frame.frame_id
+  _diffrn_scan_frame.frame_number
+  _diffrn_scan_frame.integration_time
+         SCAN1     FRAME1    1         10.0000 
+loop_
+  _diffrn_scan_frame_axis.frame_id
+  _diffrn_scan_frame_axis.axis_id
+  _diffrn_scan_frame_axis.angle
+  _diffrn_scan_frame_axis.displacement
+         FRAME1    GONIOMETER_PHI      180.00    0.00      
+         FRAME1    DETECTOR_Z          0.00      72.12     
+         FRAME1    DETECTOR_Y          0.00      0.00      
+         FRAME1    DETECTOR_X          0.00      0.00      
+         FRAME1    DETECTOR_PITCH      0.00      0.00 
+loop_
+  _axis.id
+  _axis.type
+  _axis.equipment
+  _axis.depends_on
+  _axis.vector[1]
+  _axis.vector[2]
+  _axis.vector[3]
+  _axis.offset[1]
+  _axis.offset[2]
+  _axis.offset[3]
+         GONIOMETER_PHI      rotation  goniometer          .         1         0        0        0        0        0        
+         SOURCE    general   source    .         0         0         1         0        0        0        
+         GRAVITY   general   gravity   .         0         -1        0         0        0        0        
+         DETECTOR_Z          translation         detector  .         0         0        -1       0        0        0        
+         DETECTOR_Y          translation         detector  DETECTOR_Z          0        1        0        0        0        0        
+         DETECTOR_X          translation         detector  DETECTOR_Y          1        0        0        0        0        0        
+         DETECTOR_PITCH      rotation  detector  DETECTOR_X          0         1        0        0        0        0        
+         ELEMENT_X           translation         detector  DETECTOR_PITCH      1        0        0        -105.108 107.865  0        
+         ELEMENT_Y           translation         detector  ELEMENT_X           0        1        0        0        0        0
+loop_
+  _diffrn_detector.id
+  _diffrn_detector.diffrn_id
+  _diffrn_detector.type
+  _diffrn_detector.details
+  _diffrn_detector.number_of_axes
+  _diffrn_detector.layer_thickness
+         ADSCQ210-SN457      DS1       'ADSC QUANTUM210'   'bin 2x2 hardware'  4        0.00000
+loop_
+  _diffrn_detector_axis.detector_id
+  _diffrn_detector_axis.axis_id
+         ADSCQ210-SN457      DETECTOR_X          
+         ADSCQ210-SN457      DETECTOR_Y          
+         ADSCQ210-SN457      DETECTOR_Z          
+         ADSCQ210-SN457      DETECTOR_PITCH 
+loop_
+  _diffrn_detector_element.id
+  _diffrn_detector_element.detector_id
+         ELEMENT1  ADSCQ210-SN457 
+loop_
+  _diffrn_data_frame.scan_id
+  _diffrn_data_frame.id
+  _diffrn_data_frame.detector_element_id
+  _diffrn_data_frame.detector_id
+  _diffrn_data_frame.array_id
+  _diffrn_data_frame.binary_id
+  _diffrn_data_frame.details
+         SCAN1     FRAME1    ELEMENT1  ADSCQ210-SN457      image_1   1         
+;
+HEADER_BYTES=  512;
+DIM=2;
+BYTE_ORDER=little_endian;
+TYPE=unsigned_short;
+SIZE1=2048;
+SIZE2=2048;
+PIXEL_SIZE=0.1024;
+BIN=2x2;
+ADC=fast;
+DETECTOR_SN=457;
+TIME=10.000000;
+DISTANCE=72.117400;
+PHI=180.000000;
+OSC_START=180.000000;
+OSC_RANGE=20.000000;
+WAVELENGTH=0.711955;
+BEAM_CENTER_X=105.107510;
+BEAM_CENTER_Y=101.696988;
+ACC_TIME=16953;
+CREV=1;
+BIN_TYPE=HW;
+; 
+loop_
+  _array_structure_list.array_id
+  _array_structure_list.index
+  _array_structure_list.dimension
+  _array_structure_list.precedence
+  _array_structure_list.direction
+  _array_structure_list.axis_set_id
+         image_1   1         2048      1         increasing          ELEMENT_X           
+         image_1   2         2048      2         increasing          ELEMENT_Y 
+loop_
+  _array_element_size.array_id
+  _array_element_size.index
+  _array_element_size.size
+         image_1   1         102.400e-6          
+         image_1   2         102.400e-6 
+_array_structure.id                     image_1
+_array_structure.encoding_type          'signed 32-bit integer'
+loop_
+  _array_structure_list_axis.id
+  _array_structure_list_axis.axis_set_id
+  _array_structure_list_axis.axis_id
+  _array_structure_list_axis.displacement
+  _array_structure_list_axis.displacement_increment
+[ELEMENT_X ELEMENT_X]         ELEMENT_X           ELEMENT_X           0.000000  0.102400  
+[ELEMENT_Y ELEMENT_Y]         ELEMENT_Y           ELEMENT_Y           0.000000  -0.102400 
+
+_array_intensities.array_id             image_1
+_array_intensities.binary_id            1
+_array_intensities.linearity            linear
+_array_intensities.gain                 2.53
+_array_intensities.overload             65535
+_array_intensities.undefined_value      0
+_array_intensities.pixel_slow_bin_size  2
+_array_intensities.pixel_fast_bin_size  2
+loop_
+_array_data.array_id                  
+_array_data.binary_id             
+_array_data.data                        
+image_1 1
+;
+--CIF-BINARY-FORMAT-SECTION--
+Content-Type: application/octet-stream;
+     conversions="x-CBF_BYTE_OFFSET"
+Content-Transfer-Encoding: BASE64
+X-Binary-Size: 4202112
+X-Binary-ID: 1
+X-Binary-Element-Type: "signed 32-bit integer"
+X-Binary-Element-Byte-Order: LITTLE_ENDIAN
+Content-MD5: HkoNTj/T904MnJAgwmPREQ==
+X-Binary-Number-of-Elements: 4194304
+X-Binary-Size-Fastest-Dimension: 2048
+X-Binary-Size-Second-Dimension: 2048
+X-Binary-Size-Padding: 4095
+
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+--CIF-BINARY-FORMAT-SECTION----
+;
+loop_
+  _full_frame.binary_id
+  _full_frame.frame_id
+  _full_frame.scan_id
+  _full_frame.array_id
+         1         frame1    scan1     image_1 
+loop_
+  _diffrn_scan_simple.scan_id
+  _diffrn_scan_simple.axis_id
+         scan1     goniometer_phi 
+loop_
+  _simple_detector_axis.id
+         element_x           
+         element_y 
+loop_
+  _scan_array_data.scan_id
+         scan1 

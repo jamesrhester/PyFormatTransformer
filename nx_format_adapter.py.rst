@@ -53,7 +53,7 @@ any key that uses them. ::
     canonical_groupings = {('wavelength id',):['incident wavelength'],
     ('simple detector axis id',):['simple detector axis vector mcstas','simple detector axis offset mcstas','simple detector axis type'],
     ('goniometer axis id',):['goniometer axis vector mcstas','goniometer axis offset mcstas','goniometer axis type'],
-    ('simple scan frame frame id',):['simple scan data'],
+    ('simple scan frame scan id','simple scan frame frame id',):['simple scan data'],
     ('data axis id',):['data axis precedence'],
     ('frame axis location axis id', 'frame axis location frame id'):['frame axis location angular position']
     }
@@ -259,6 +259,7 @@ it is denoted identically in both the DDLm dictionary and NeXus. ::
             """Initialise all values"""
             self._id_orders = {}     #remember the order of keys
             self._stored = {}        #temporary storage of names
+            self.top_name = ""
 
 Obtaining values
 ================
@@ -301,7 +302,7 @@ value (numpy is OK) hence we are ::
                allvalues = getattr(parent_group,prop)
                try:
                    units = getattr(allvalues,"units")
-               except KeyError:
+               except (AttributeError,KeyError):
                    pass
            else:
                allvalues = parent_group
@@ -862,10 +863,13 @@ value. ::
                     output_order,sort_order = self.create_index(ordering_tree[0],value_tree[0])
                     if compress:    #identical values removed
                         print 'Trying to compress:' + `output_order`
-                        if len(set(output_order))==1:
-                            output_order = [output_order[0],]
-                        else:
-                            print 'Unable to compress, %d distinct values' % len(set(output_order))
+                        try:
+                            if len(set(output_order))==1:
+                                output_order = [output_order[0],]
+                            else:
+                                print 'Unable to compress, %d distinct values' % len(set(output_order))
+                        except TypeError:
+                            print 'Unhashable, no compression'
                 else:
                     output_order,sort_order = value_tree[0][0],None
                 self.store_a_value(parent_group,names[0],output_order,self._stored[names[0]][1],self._stored[names[0]][2])
@@ -885,6 +889,8 @@ when writing non-key values. ::
             current_loc = parent_group
             if len(location_info)>1:   #some singleton dummy groups above us
                 current_loc = self._find_group(location_info[:-1],parent_group)
+            elif len(location_info)==0: #is parent group
+                return parent_group
             target_class = location_info[-1]
             target_groups = [g for g in current_loc.walk() if g.nxclass == target_class]
             found = [g for g in target_groups if g.nxname == value]
