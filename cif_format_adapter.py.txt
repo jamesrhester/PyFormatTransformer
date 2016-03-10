@@ -33,15 +33,20 @@ Configuration data
 ==================
 
 These tables show which datanames are grouped together, and how canonical names match up to 
-CIF names. This is either
+CIF names.  Canonical names are either
 a direct match, or individual values are embedded in a string value.  None of
 the latter are covered here. An optional function is included in case the
-value has to be converted (units, list of restricted values, array creation)::
+value has to be converted (units, list of restricted values, array creation). CIF files can
+contain single-dataname keys, or combinations of datanames which form a compound key.
+We express this situation by giving the key as a (single-key,(compound_key_1,compound_key_2...))
+tuple. ::
 
 
-    canonical_groupings = {'wavelength id':['incident wavelength'],
-    'axis id':['axis vector','axis offset','axis type'],
-    '2D data identifier':['2D data']
+    canonical_groupings = {('wavelength id',()):['incident wavelength'],
+    ('axis id',()):['axis vector','axis offset','axis type'],
+    ('2D data identifier',()):['2D data'],
+    ('frame axis location key',('frame axis location axis id','frame axis location scan id',
+         'frame axis location frame id')):['frame axis location angular position']
     }
 
     canonical_name_locations = {
@@ -92,6 +97,8 @@ value has to be converted (units, list of restricted values, array creation)::
     "frame axis location axis displacement":["_diffrn_scan_frame_axis.displacement",None],
     "frame axis location angular position":["_diffrn_scan_frame_axis.angle",None],
     "frame axis location frame id":["_diffrn_scan_frame_axis.frame_id",None],
+    "frame axis location key":["_diffrn_scan_frame_axis.key",None],
+    "frame axis location scan id":["_diffrn_scan_frame_axis.scan_id",None],
     "simple scan frame key":["_diffrn_scan_simple_frame.key",None],
     "2D data identifier":["_array_data.binary_id",None],
     "2D data structure id":["_array_data.array_id",None],
@@ -251,14 +258,27 @@ blockname so that we can reopen the file with pycbf if asked for an image. ::
                 loop_ids = [a for a in all_ids if self.cifblock.has_key(a)]
                 self.cifblock.CreateLoop(loop_ids)
             # create the loops
-            for key_id,other_names in self.domain_names.items():
-                true_key = self.name_locations.get(key_id,[None,None])[0]
-                true_others = [self.name_locations.get(o,[None,None]) for o in other_names]
-                all_names = [t[0] for t in true_others if self.cifblock.has_key(t[0])]
-                print 'CIF: true_key, true_others:' + `true_key` + `true_others`
-                if true_key is not None and len(all_names)>0:
-                    print "CIF: creating loop with " + `[true_key]+all_names`
-                    self.cifblock.CreateLoop([true_key]+all_names)
+
+We have a choice of outputting the single-dataname key, or else all of the compound keys
+and optionally the single-dataname key. ::
+
+            for key_ids,other_names in self.domain_names.items():
+                # key is either
+                single_key = key_ids[0]
+                single_key = self.name_locations[single_key][0]
+                single_key = [s for s in [single_key] if self.cifblock.has_key(s)]
+                compound_keys = [self.name_locations[c][0] for c in key_ids[1]]
+                compound_keys = [c for c in compound_keys if self.cifblock.has_key(c)]
+                true_others = [self.name_locations[o][0] for o in other_names]
+                all_names = [t for t in true_others if self.cifblock.has_key(t)]
+                print 'CIF: keys, true_others:' + `single_key` + `compound_keys` + `true_others`
+                have_keys = len(single_key)==1 or (len(compound_keys)==len(key_ids[1]))
+                if len(all_names)>0:
+                    key_list = []
+                    if single_key: key_list += single_key
+                    if have_keys: key_list += compound_keys
+                    print "CIF: creating loop with " + `key_list+all_names`
+                    self.cifblock.CreateLoop(key_list+all_names)
             self.all_blocks.append(self.cifblock)
             self.cifblock = None
             self.output_image_cache = None

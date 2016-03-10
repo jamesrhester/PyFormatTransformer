@@ -55,7 +55,7 @@ any key that uses them. ::
     ('goniometer axis id',):['goniometer axis vector mcstas','goniometer axis offset mcstas','goniometer axis type'],
     ('simple scan frame scan id','simple scan frame frame id',):['simple scan data'],
     ('data axis id',):['data axis precedence'],
-    ('frame axis location axis id', 'frame axis location frame id'):['frame axis location angular position']
+    ('frame axis location scan id','frame axis location axis id', 'frame axis location frame id'):['frame axis location angular position']
     }
 
 
@@ -106,9 +106,7 @@ is the field/attribute name; an empty name means that the group name should
 be used/set.  An attribute of a named field is provided by appending an '@'
 sign and the attribute name.
 
-An asterisk (*) means that the value should be attached to the group
-itself (as for NXtransformations groups).  An empty name means that
-the values are those of the group name itself.
+An empty name means that the values are those of the group name itself.
 
 Following these location descriptions we have two functions that are
 applied to values before output, and after input, to allow transformations. If
@@ -166,7 +164,8 @@ table.  We expand the location and ordering tables to save checking each time. :
 
             self.equivalent_ids = {
             "goniometer axis id":["goniometer location axis id"],
-            "frame id":["frame axis location frame id","simple scan frame frame id"]
+            "frame id":["frame axis location frame id","simple scan frame frame id"],
+            "simple scan frame scan id":["frame axis location scan id"]
             }
 
             for k,i in self.equivalent_ids.items():
@@ -479,7 +478,7 @@ as there are so many multiple-valued names. ::
 
         def get_single_names(self):
             """Return a list of canonical ids that may only take a single
-            value in one data unit"""
+            unique value in one data unit"""
             return ["simple scan frame scan id"]
 
 Obtaining values
@@ -644,10 +643,11 @@ performed when the 'is_ordering' flag is set in the 'get_sub_tree' call. ::
                   raise ValueError, 'No tree found for key list ' + `all_keys`
               print 'NX: found key tree ' + `key_tree`
               # now uncompress any single values
+              key_tree = (key_tree,None)
               if ordering_key is not None:
                   maxlen = self.get_leaf_length(key_tree)
                   print 'Found maximum leaf length of %d' % maxlen
-                  self.uncompress_tree(key_tree,ordering_tree,maxlen)
+                  self.uncompress_tree(key_tree,(ordering_tree,None),maxlen)
               final_arrays = []
               [final_arrays.append([]) for k in all_keys]  #to avoid pointing to the same list
               length,units_array = self.synthesize_values(final_arrays,key_tree)
@@ -657,7 +657,7 @@ performed when the 'is_ordering' flag is set in the 'get_sub_tree' call. ::
                   dummy_array = []
                   [counting_arrays.append([]) for k in all_keys]  #to avoid pointing to the same list
                   print 'NX: creating ordering id'
-                  length,dummy_array = self.synthesize_values(counting_arrays,ordering_tree)
+                  length,dummy_array = self.synthesize_values(counting_arrays,(ordering_tree,None))
                   counting_dict = dict(zip(all_keys,zip(counting_arrays,dummy_array)))
                   valuedict[ordering_key]=counting_dict[all_keys[-1]]
                   print 'NX: set %s to %s' % (ordering_key,valuedict[ordering_key])
@@ -696,13 +696,13 @@ the length of the maximum-length leaf node encountered. ::
               return sub_dict,None, ordering_dict
 
 A utility routine to find the length of the leaf nodes in the given tree, remembering that
-each leaf is a (value,units) tuple. ::
+each leaf is a (value,units) tuple, and each node apart is also a (dict,units) tuple ::
 
         def get_leaf_length(self,target_tree):
             maxlen = 0
-            if isinstance(target_tree,dict):
-                for k in target_tree.keys():
-                    maxlen = max(self.get_leaf_length(target_tree[k]),maxlen)
+            if isinstance(target_tree[0],dict):
+                for k in target_tree[0].keys():
+                    maxlen = max(self.get_leaf_length(target_tree[0][k]),maxlen)
             else:
                 try:
                     maxlen = len(target_tree[0])
@@ -712,26 +712,26 @@ each leaf is a (value,units) tuple. ::
             return maxlen
 
 A utility routine to expand out any leaf nodes of length one by repeating that value
-to the maximum number of entries. ::
+to the maximum number of entries. We do not do perfect recursion so that we can
+mutate the value of the dictionary keys. ::
 
         def uncompress_tree(self,target_tree,ordering_tree,target_length):
-            if isinstance(target_tree,dict):
-                for k in target_tree.keys():
-                    test_val = target_tree[k]
-                    if isinstance(test_val,tuple):
-                      if isinstance(test_val[0],list):
-                        if len(test_val[0])== 1:
+            if isinstance(target_tree[0],dict):
+                for k in target_tree[0].keys():
+                    test_val = target_tree[0][k]
+                    if isinstance(test_val[0],list):
+                      if len(test_val[0])== 1:
                             print 'Expanding ' + `test_val`
                             target_tree[k] = (list(test_val[0])*target_length,test_val[1])
                             ordering_tree[k] = (self.make_id(target_tree[k][0]),None)
-                      elif isinstance(test_val[0],numpy.ndarray):
+                    elif isinstance(test_val[0],numpy.ndarray):
                         if test_val[0].size == 1:
                             print 'Expanding ' + `test_val`
-                            target_tree[k] = (list(numpy.atleast_1d(test_val[0]))*target_length,test_val[1])
-                            ordering_tree[k] = (self.make_id(target_tree[k][0]),None)
+                            target_tree[0][k] = (list(numpy.atleast_1d(test_val[0]))*target_length,test_val[1])
+                            ordering_tree[0][k] = (self.make_id(target_tree[0][k][0]),None)
                     else:
-                        for k in target_tree.keys():
-                            self.uncompress_tree(target_tree[k],ordering_tree[k],target_length)
+                        for k in target_tree[0].keys():
+                            self.uncompress_tree(target_tree[0][k],ordering_tree[0][k],target_length)
             else:
                 print 'Warning: uncompress dropped off end with value ' + `target_tree`
 
@@ -746,13 +746,13 @@ have units attached, which we harvest out and assume to be identical. ::
               """
               print 'Called with %s, tree %s' % (`key_arrays`,`key_tree`)
               units_array = [None]
-              for one_key in key_tree.keys():
-                  if isinstance(key_tree[one_key],dict):
-                     extra_length,units = self.synthesize_values(key_arrays[1:],key_tree[one_key])
+              for one_key in key_tree[0].keys():
+                  if isinstance(key_tree[0][one_key][0],dict):
+                     extra_length,units = self.synthesize_values(key_arrays[1:],key_tree[0][one_key])
                      key_arrays[0].extend([one_key]*extra_length)
                      print 'Extended %s with %s' % (`key_arrays[0]`,`one_key`)
                   else:
-                     value,units = key_tree[one_key]
+                     value,units = key_tree[0][one_key]
                      print 'Leaf value for %s is: ' % one_key + `value` + ',' + `units`
                      extra_length = len(value)
                      key_arrays[1].extend(value)
@@ -763,7 +763,7 @@ have units attached, which we harvest out and assume to be identical. ::
                   units_array.append(units)
               print 'Key arrays now ' + `key_arrays`
               print 'Units array now ' + `units_array`
-              return extra_length * len(key_tree),units_array
+              return extra_length * len(key_tree[0]),units_array
           
 Setting values
 --------------
@@ -890,6 +890,7 @@ when writing non-key values. ::
             if len(location_info)>1:   #some singleton dummy groups above us
                 current_loc = self._find_group(location_info[:-1],parent_group)
             elif len(location_info)==0: #is parent group
+                parent_group.nxname = value
                 return parent_group
             target_class = location_info[-1]
             target_groups = [g for g in current_loc.walk() if g.nxclass == target_class]
