@@ -60,7 +60,10 @@ dREL methods only operate on those rows that match the criteria.
             print 'DEBUG: Accessing %s' % name
             if super(GenericInput,self).has_key(name):  #stored already
                 print 'Providing cached value for %s' % (name)
-                return super(GenericInput,self).__getitem__(name)
+                inval = super(GenericInput,self).__getitem__(name)
+                if not isinstance(inval,list):
+                    print 'WARNING: non-list value stored for %s:%s' %(name,`inval`)
+                return inval
             our_type = self.dictionary[name]['_type.contents']
             our_units = self.dictionary[name].get('_units.code',None)
             generic_name = self.generic_name_table[name]
@@ -84,16 +87,23 @@ dREL methods only operate on those rows that match the criteria.
             return result
             
         def __setitem__(self,name,value):
-            """Set a value, after checking. We do not touch the underlying input file"""
+            """Set a value, after checking. We do not touch the underlying input file.
+            All values should be lists at the top level."""
             if value is None or isinstance(value,list) and None in value:
                 raise ValueError, "Attempt to set None value for %s" % name
             if not hasattr(value,'__iter__'):
-                print 'Setting %s to %s' % (name,value)
+                print "WARNING: setting a non-list value:"
+                print 'Setting %s to %s' % (name,`value`)
+                raise ValueError, "Non-list value provided for storage: " + `value`
             elif len(value)>10:
                 print 'Setting %s to list' % name
             else:
                 print 'Setting %s to %s' % (name,str(value))
-            super(GenericInput,self).__setitem__(name,value)
+            end_value = value
+            if not isinstance(value,list):
+                print 'Creating list at top level'
+                end_value = [a for a in value]
+            super(GenericInput,self).__setitem__(name,end_value)
 
         def has_key(self,name):
             import traceback
@@ -275,8 +285,10 @@ name to the generic equivalent. ::
             "_axis.offset[2]":"axis offset Y component",
             "_axis.offset[3]":"axis offset Z component",
             "_goniometer_axis_local.id":"goniometer axis id",
+            "_goniometer_axis_local.key":"goniometer axis key",
             "_goniometer_axis_local.vector":"goniometer axis vector",
             "_goniometer_axis_local.offset":"goniometer axis offset",
+            "_goniometer_axis_local.equipment":"goniometer axis equipment",
             "_goniometer_axis_local.offset_convention2_local":"goniometer axis offset mcstas",
             "_goniometer_axis_local.vector_convention2_local":"goniometer axis vector mcstas",
             "_goniometer_axis_local.type":"_goniometer axis type",
@@ -513,8 +525,8 @@ This routine is responsible for overall control of the transformation. ::
                 if result is None:
                     print "Skipping %s, not found or derivable from input file" % name   # can't be done
                 else:#now output this value
-                    if name in single_valued_names:
-                        result = result[0]   #remove one level of listing
+                #    if name in single_valued_names:
+                #        result = result[0]   #remove one level of listing
                     out_module.set_by_name(name,result,generic.get_type(name))
 
         if len(output_schedule)>0:
@@ -527,8 +539,9 @@ This routine is responsible for overall control of the transformation. ::
                 filter_names = output_schedule.keys()
                 [generic.add_filter(k,output_schedule[k]) for k in filter_names]
                 for unit_key in output_schedule:
-                    out_module.set_by_name(unit_key,output_schedule[unit_key][single_data_unit],
-                                               generic.get_type(unit_key))
+                    out_module.set_by_name(unit_key,generic.get_by_canonical_name(unit_key),generic.get_type(unit_key))
+                    # out_module.set_by_name(unit_key,output_schedule[unit_key][single_data_unit],
+                    #                           generic.get_type(unit_key))
                 write_out_names(must_be_single)
                 out_module.close_data_unit()
         else:

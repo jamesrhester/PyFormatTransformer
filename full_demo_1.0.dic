@@ -9,7 +9,7 @@ _dictionary.class                       Instance
 _dictionary.namespace                   ?
 _description.text 
                                         'This dictionary was developed as a demonstration dictionary showing how datanames in an olog presentation can be related to one another.'
-_dictionary.date                        2016-03-09
+_dictionary.date                        2016-03-10
 loop_
   _dictionary_audit.version
   _dictionary_audit.date
@@ -28,7 +28,7 @@ loop_
          0.1.2     2016-02-17          'Added code for axis position arrays.(James Hester)'       
          0.1.3     2016-02-19          'Added methods and pullback specifications for simple array axes(James Hester)'          
          0.1.4     2016-02-25          'Fixing definitions for array data(James Hester)'          
-         1.0       2016-03-09          "All locally-defined items now contain string '_local'(James Hester)()()()()"
+         1.0       2016-03-10          "All locally-defined items now contain string '_local'(James Hester)()()()()()()()()()"
 
 save_DEMO_DIC_HEAD
 
@@ -5603,14 +5603,29 @@ _definition.id                          goniometer_axis_local
 _definition.scope                       Category
 _definition.class                       Loop
 _description.text                       'This category contains axes that belong to the goniometer'
-_category.key_id                        '_goniometer_axis_local.id'
+_category.key_id                        '_goniometer_axis_local.key'
 loop_
   _category_key.name
          '_goniometer_axis_local.id' 
 _category_construct_local.type          Filter
 _category_construct_local.components ['_axis.equipment']
 _category_construct_local.text_filter [goniometer]
-_category_construct_local.new_ids [id]
+_category_construct_local.new_ids [key]
+
+save_
+
+
+save__goniometer_axis_local.equipment
+
+_definition.id                          '_goniometer_axis_local.equipment'
+_name.object_id                         equipment
+_name.category_id                       goniometer_axis_local
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+_type.purpose                           State
+_type.source                            Recorded
+_type.container                         Single
+_type.contents                          Text
 
 save_
 
@@ -5627,6 +5642,37 @@ _type.purpose                           Link
 _type.source                            Related
 _type.container                         Multiple
 _type.contents                          Code
+loop_
+  _method.purpose
+  _method.expression
+         Evaluation          
+;
+_goniometer_axis_local.id = _goniometer_axis_local.key[0]
+
+; 
+
+save_
+
+
+save__goniometer_axis_local.key
+
+_definition.id                          '_goniometer_axis_local.key'
+_name.object_id                         key
+_name.category_id                       goniometer_axis_local
+_definition.class                       Datum
+_description.text                       'PLEASE DEFINE ME'
+_type.purpose                           Key
+_type.source                            Assigned
+_type.container                         Array
+_type.contents                          Text
+loop_
+  _method.purpose
+  _method.expression
+         Evaluation          
+;
+_goniometer_axis_local.key = [_goniometer_axis_local.id,"goniometer"]
+
+; 
 
 save_
 

@@ -207,7 +207,7 @@ proceed even if an item is missing. This is so an item that depends on one of
 many possible items being present can still be output. ::
 
             self.write_orders = {'simple scan data':['data axis precedence','data axis id'],
-                                 'detector axis vector mcstas':['frame axis location angular position'],
+                                 'simple detector axis vector mcstas':['frame axis location angular position'],
                                  'goniometer axis vector mcstas':['frame axis location angular position'],}
 
 Synthetic data
@@ -505,7 +505,7 @@ the raw representation. ::
           unit_abbrev = self.unit_conversions.get(units,units)
           old_unit_abbrev = self.unit_conversions.get(old_units,old_units)
           proper_units = self.manage_units(before_units,old_unit_abbrev,unit_abbrev)
-          return proper_units
+          return [a for a in proper_units]  #top level is a list
 
 We define a version of get_by_name that returns the value in native format. This is useful
 for internal use when we simply care about item equality and structure.  self._stored
@@ -1051,6 +1051,7 @@ that we can order the values in each branch of the tree correctly. ::
                 [wait_names.update(list(k)) for k in self.domain_names.keys() if name in self.domain_names[k]]
             waiting = (priority_names | wait_names) - output_names
             priority_names = priority_names - waiting #drop missing ones
+            print "Priority names: " + `priority_names`
             if len(waiting)>0:
                 print "Warning: following IDs not found but might be needed in order to output:" + `waiting`
             # create any synthetic names

@@ -182,3 +182,38 @@ _type.dimension [*]
 _type.contents                          Name
 
 save_
+
+# The following is not obtained from the imported ddl.dic and must be
+# repeated here.  Probably a good idea.
+#=============================================================================
+#  The attribute validation criteria for application to a domain dictionary
+#============================================================================
+
+    loop_
+    _dictionary_valid.application
+    _dictionary_valid.attributes
+  [Dictionary  Mandatory]       ['_dictionary.title'  '_dictionary.class'  
+                                 '_dictionary.version'  '_dictionary.date'  
+                                 '_dictionary.uri'  
+                                 '_dictionary.ddl_conformance'  
+                                 '_dictionary.namespace'] 
+  [Dictionary  Recommended]     ['_description.text'  
+                                 '_dictionary_audit.version'  
+                                 '_dictionary_audit.date'  
+                                 '_dictionary_audit.revision'] 
+  [Dictionary  Prohibited]      [ALIAS  CATEGORY  DEFINITION  ENUMERATION  LOOP  
+                                 METHOD  NAME  TYPE  UNITS CATEGORY_CONSTRUCT] 
+  [Category  Mandatory]         ['_definition.id'  '_definition.scope'  
+                                 '_definition.class'  '_name.category_id'  
+                                 '_name.object_id'] 
+  [Category  Recommended]       ['_category.key_id'  '_category_key.name'  
+                                 '_description.text'] 
+  [Category  Prohibited]        [ALIAS  DICTIONARY  ENUMERATION  IMPORT  LOOP  
+                                 TYPE  UNITS] 
+  [Item  Mandatory]             ['_definition.id'  '_definition.update'  
+                                 '_name.object_id'  '_name.category_id'  
+                                 '_type.container'  '_type.contents'] 
+  [Item  Recommended]           ['_definition.scope'  '_definition.class'  
+                                 '_type.source'  '_type.purpose'  
+                                 '_description.text'  '_description.common'] 
+  [Item  Prohibited]            [CATEGORY  DICTIONARY CATEGORY_CONSTRUCT] 

@@ -45,26 +45,36 @@ loop_
   SCAN1       FRAME1    DETECTOR_Y          0.00      0.00      
   SCAN1       FRAME1    DETECTOR_X          0.00      0.00      
   SCAN1       FRAME1    DETECTOR_PITCH      0.00      0.00      
+  SCAN1       FRAME1    ELEMENT_X           0.00      0.00      
+  SCAN1       FRAME1    ELEMENT_Y           0.00      0.00      
   SCAN1       Frame2    GONIOMETER_PHI      2.00      0.00      
   SCAN1       Frame2    DETECTOR_Z          0.00      72.17     
   SCAN1       Frame2    DETECTOR_Y          0.00      0.00      
   SCAN1       Frame2    DETECTOR_X          0.00      0.00      
   SCAN1       Frame2    DETECTOR_PITCH      0.00      0.00      
+  SCAN1       Frame2    ELEMENT_X           0.00      0.00      
+  SCAN1       Frame2    ELEMENT_Y           0.00      0.00      
   SCAN1       Frame3    GONIOMETER_PHI      4.00      0.00      
   SCAN1       Frame3    DETECTOR_Z          0.00      72.17     
   SCAN1       Frame3    DETECTOR_Y          0.00      0.00      
   SCAN1       Frame3    DETECTOR_X          0.00      0.00      
   SCAN1       Frame3    DETECTOR_PITCH      0.00      0.00      
+  SCAN1       Frame3    ELEMENT_X           0.00      0.00      
+  SCAN1       Frame3    ELEMENT_Y           0.00      0.00      
   SCAN1       Frame4    GONIOMETER_PHI      6.00      0.00      
   SCAN1       Frame4    DETECTOR_Z          0.00      72.17     
   SCAN1       Frame4    DETECTOR_Y          0.00      0.00      
   SCAN1       Frame4    DETECTOR_X          0.00      0.00      
   SCAN1       Frame4    DETECTOR_PITCH      0.00      0.00      
+  SCAN1       Frame4    ELEMENT_X           0.00      0.00      
+  SCAN1       Frame4    ELEMENT_Y           0.00      0.00      
   SCAN1       Frame5    GONIOMETER_PHI      8.00      0.00      
   SCAN1       Frame5    DETECTOR_Z          0.00      72.17     
   SCAN1       Frame5    DETECTOR_Y          0.00      0.00      
   SCAN1       Frame5    DETECTOR_X          0.00      0.00      
   SCAN1       Frame5    DETECTOR_PITCH      0.00      0.00 
+  SCAN1       Frame5    ELEMENT_X           0.00      0.00      
+  SCAN1       Frame5    ELEMENT_Y           0.00      0.00      
 loop_
   _axis.id
   _axis.type
@@ -154,7 +164,7 @@ loop_
          image_1   4         linear    2.53      65535     0         2         2        
          image_1   5         linear    2.53      65535     0         2         2
 loop_
-  _diffrn_radiation_wavelength_id
+  _diffrn_radiation_wavelength.id
   _diffrn_radiation_wavelength.wavelength
   _diffrn_radiation_wavelength.wt
          L1        0.711955  1.0 
