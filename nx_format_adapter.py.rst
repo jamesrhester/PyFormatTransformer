@@ -821,7 +821,7 @@ output of such trees, this layer is removed if an ordering key is not used. ::
                 return start_arrays[0]
             partitioned = [self.partition(start_arrays[0],a) for a in start_arrays[1:]]
             part_arrays = zip(*[a[0] for a in partitioned])
-            sub_tree = dict(zip(partitioned[0][1],[self.create_tree(p,current_depth+1,max_depth) for p in part_arrays]))
+            sub_tree = (dict(zip(partitioned[0][1],[self.create_tree(p,current_depth+1,max_depth) for p in part_arrays])),None)
             print 'NX: returned ' + `sub_tree`
             return sub_tree
         
@@ -852,10 +852,10 @@ value. ::
             print 'Outputting tree: ' + `value_tree` + ' with ordering ' + `ordering_tree`
             if len(names)==0:  #finished
                 return
-            if isinstance(value_tree,dict):
-                for one_key in value_tree.keys():
+            if isinstance(value_tree[0],dict):
+                for one_key in value_tree[0].keys():
                     child_group = self.store_a_group(parent_group,names[0],one_key,self._stored[names[0]][1],self._stored[names[0]][2])
-                    self.output_tree(child_group,names[1:],value_tree[one_key],ordering_tree[one_key],compress)
+                    self.output_tree(child_group,names[1:],value_tree[0][one_key],ordering_tree[0][one_key],compress)
             else:   #we are at the bottom level
                 # shortcut for single values
                 if ordering_tree != value_tree and (isinstance(value_tree[0],list) and len(value_tree[0])>1):

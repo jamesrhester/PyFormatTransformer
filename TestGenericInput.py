@@ -512,6 +512,9 @@ class RoundTripTestCase(unittest.TestCase):
         self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
         self.cfa.open_file("round_trip_return.cif")
         self.cfa.open_data_unit()
+        self.old_cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
+        self.old_cfa.open_file("testfiles/multi-image-test.cif")
+        self.old_cfa.open_data_unit()
         
     def make_bundle(self,filename,name_list):
         """Make a filename bundle"""
@@ -521,18 +524,27 @@ class RoundTripTestCase(unittest.TestCase):
         f.close()
 
     def testWavelength(self):
-        self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
-        self.cfa.open_file("round_trip_return.cif")
-        self.cfa.open_data_unit()
         w = self.cfa.get_by_name("incident wavelength","Real")
         self.failUnless(abs(w-0.711955)<0.001)
 
     def testPositions(self):
-        pass
+        p = self.cfa.get_by_name("frame axis location angular position","Real")
+        a = self.cfa.get_by_name("frame axis location axis id","Text")
+        f = self.cfa.get_by_name("frame axis location frame id","Text")      
+        op = self.old_cfa.get_by_name("frame axis location angular position","Real")
+        oa = self.old_cfa.get_by_name("frame axis location axis id","Text")
+        of = self.old_cfa.get_by_name("frame axis location frame id","Text")
+        matched_up = zip(a,f,p)
+        matched_up_old = zip(oa,of,op)
+        for q,r,s in matched_up:
+            check_val = [x[2] for x in matched_up_old if x[0]==q and x[1][-1]==r]
+            print 'Checking %s %s, got %s' % (q,r,check_val)
+            self.failUnless(len(check_val)==1)
+            self.failUnless(check_val[0] == s)
     
 if __name__=='__main__':
-    unittest.main()
-    #suite = unittest.TestLoader().loadTestsFromTestCase(NXAdapterWriteReadTestCase)
+    #unittest.main()
+    suite = unittest.TestLoader().loadTestsFromTestCase(NXAdapterWriteReadTestCase)
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(NXAdapterInternalRoutinesTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformFromNXTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(CifAdapterReadTestCase))
@@ -541,5 +553,5 @@ if __name__=='__main__':
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformToNXImageTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GIFunctionalityTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformFromNXImageTestCase))
-    #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(RoundTripTestCase))
-    #unittest.TextTestRunner(verbosity=2).run(suite)
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(RoundTripTestCase))
+    unittest.TextTestRunner(verbosity=2).run(suite)
