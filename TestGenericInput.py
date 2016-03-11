@@ -173,7 +173,7 @@ class NXAdapterWriteReadTestCase(unittest.TestCase):
         print 'New positions: ' + `new_positions`
         newposindex = list(new_positions).index(25*math.pi/180)
         self.failUnless(new_axes[newposindex]==axis_names[aposindex])
-        self.failUnless(int(new_pos[newposindex])==frame_nos[aposindex])
+        self.failUnless(new_pos[newposindex]=="Frame"+str(frame_nos[aposindex]))
 
     def testWriteEntryName(self):
         """Test that an entry name is written correctly"""
@@ -211,7 +211,7 @@ class NXAdapterWriteReadTestCase(unittest.TestCase):
         print 'New positions: ' + `new_positions`
         newposindex = list(new_positions).index(6*math.pi/180)
         self.failUnless(new_axes[newposindex]==axis_names[aposindex])
-        self.failUnless(int(new_pos[newposindex])==frame_nos[aposindex])
+        self.failUnless(new_pos[newposindex]=="Frame"+str(frame_nos[aposindex]))
 
 class CifAdapterReadTestCase(unittest.TestCase):
     def setUp(self):
@@ -498,7 +498,9 @@ class RoundTripTestCase(unittest.TestCase):
         cif_bundle = ["incident wavelength","wavelength id","axis id",
                       "axis vector","axis offset","frame axis location frame id","2D data",
                       "2D data identifier","2D data structure id","frame axis location axis id",
-                      "frame axis location angular position", "frame axis location scan id"]
+                      "frame axis location angular position", "frame axis location scan id",
+                      "data frame id","data frame binary id","data frame array id",
+                      "data frame scan id"]
         self.make_bundle(self.nexus_bundlename,nexus_bundle)
         self.make_bundle(self.cif_bundlename,cif_bundle)
         d.manage_transform(self.nexus_bundlename,"cif","testfiles/multi-image-test.cif",
@@ -524,23 +526,40 @@ class RoundTripTestCase(unittest.TestCase):
         f.close()
 
     def testWavelength(self):
+        """Test that we recover the wavelength"""
         w = self.cfa.get_by_name("incident wavelength","Real")
         self.failUnless(abs(w-0.711955)<0.001)
 
     def testPositions(self):
+        """Test that images associated with each position are the same"""
         p = self.cfa.get_by_name("frame axis location angular position","Real")
         a = self.cfa.get_by_name("frame axis location axis id","Text")
-        f = self.cfa.get_by_name("frame axis location frame id","Text")      
+        f = self.cfa.get_by_name("frame axis location frame id","Text")
+        d = self.cfa.get_by_name("2D data","Integer")
+        di = self.cfa.get_by_name("2D data identifier","Integer")
+        frame_id = self.cfa.get_by_name("data frame id","Text")
+        binary_id = self.cfa.get_by_name("data frame binary id","Integer")
         op = self.old_cfa.get_by_name("frame axis location angular position","Real")
         oa = self.old_cfa.get_by_name("frame axis location axis id","Text")
         of = self.old_cfa.get_by_name("frame axis location frame id","Text")
-        matched_up = zip(a,f,p)
-        matched_up_old = zip(oa,of,op)
-        for q,r,s in matched_up:
-            check_val = [x[2] for x in matched_up_old if x[0]==q and x[1][-1]==r]
-            print 'Checking %s %s, got %s' % (q,r,check_val)
-            self.failUnless(len(check_val)==1)
-            self.failUnless(check_val[0] == s)
+        old_frame_id = self.old_cfa.get_by_name("data frame id","Text")
+        old_binary_id = self.old_cfa.get_by_name("data frame binary id","Integer")
+        od = self.old_cfa.get_by_name("2D data","Integer")
+        odi = self.old_cfa.get_by_name("2D data identifier","Integer")
+        frame_ref = zip(frame_id,binary_id)
+        old_frame_ref = zip(old_frame_id,old_binary_id)
+        check_angles = [x for x in zip(a,f,p) if x[0]=="GONIOMETER_PHI"]
+        old_check_angles = [x for x in zip(oa,of,op) if x[0]=="GONIOMETER_PHI"]
+        for old_axis,old_frame,old_pos in old_check_angles:
+            # check by verifying that the images for each angle are the same
+            old_binary = [x[1] for x in old_frame_ref if x[0]==old_frame][0]
+            new_frame_id = [x[1] for x in check_angles if x[2]==old_pos][0]
+            new_binary = [x[1] for x in frame_ref if x[0]==new_frame_id][0]
+            print 'Pos test: old pos %s, frame %s, binary %s:' % (old_pos,old_frame,old_binary)
+            print 'Pos test: new pos %s, frame %s, binary %s:' % (old_pos,new_frame_id,new_binary)
+            old_image = [x[0] for x in zip(od,odi) if x[1]==old_binary][0]
+            new_image = [x[0] for x in zip(d,di) if x[1]==new_binary][0]
+            self.failUnless((abs(new_image-old_image)<0.1).all())
     
 if __name__=='__main__':
     #unittest.main()

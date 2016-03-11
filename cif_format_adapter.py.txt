@@ -46,7 +46,12 @@ tuple. ::
     ('axis id',()):['axis vector','axis offset','axis type'],
     ('2D data identifier',()):['2D data'],
     ('frame axis location key',('frame axis location axis id','frame axis location scan id',
-         'frame axis location frame id')):['frame axis location angular position']
+                                'frame axis location frame id')):['frame axis location angular position'],
+    ('data frame key',('data frame scan id','data frame id')):['data frame binary id',
+                                                               'data frame element id',
+                                                               'data frame detector id',
+                                                               'data frame detector element key',
+                                                               'data frame array id']
     }
 
     canonical_name_locations = {
@@ -89,6 +94,7 @@ tuple. ::
     "data frame element id":["_diffrn_data_frame.detector_element_id",None],
     "data frame detector id":["_diffrn_data_frame.detector_id",None],
     "data frame detector element key":['_diffrn_data_frame.detector_element_key',None],
+    "data frame key":["_diffrn_data_frame.key",None],
     "scan frame key":["_diffrn_scan_frame.key",None],
     "scan frame scan id":["_diffrn_scan_frame.scan_id",None],
     "scan frame frame id":["_diffrn_scan_frame.frame_id",None],
@@ -247,6 +253,9 @@ blockname so that we can reopen the file with pycbf if asked for an image. ::
             self.output_image_cache = None
             if entryname is not None:
                 self.cifblock.blockname = entryname
+
+The following truncates binary_id as pycbf expects relatively short integers for
+binary_id. ::
 
         def close_data_unit(self):
             """Finish off [[datablock]] in file [[datafile]]"""

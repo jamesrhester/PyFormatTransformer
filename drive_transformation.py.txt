@@ -337,6 +337,8 @@ name to the generic equivalent. ::
             "_full_frame_local.binary_id":"full frame binary id",
             "_full_frame_local.array_id":"full frame array id",
             "_full_frame_local.scan_id":"full frame scan id",
+            "_full_frame_local.detector_element_id":"full frame detector element id",
+            "_full_frame_local.detector_id":"full frame detector id",
             "_diffrn_detector.key":"detector key",
             "_diffrn_detector.id":"detector id",
             "_diffrn_detector.number_of_axes":"detector number of axes",

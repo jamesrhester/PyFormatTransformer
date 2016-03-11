@@ -146,12 +146,14 @@ can interpret this array as providing an implicit ID for each
 element in the array.  When setting, we use the provided values
 to order the array elements; when returning, we can return the
 array as the value, and a sequential array for the IDs. Note that
-these implicit IDs can be used to index several arrays. ::
+these implicit IDs can be used to index several arrays. For convenience
+(but this is *not* a requirement) we specify a prefix that can be
+added when generating the ids on output. ::
 
-            self.ordering_ids = [
-            "wavelength id",
-            "frame id"
-            ]
+            self.ordering_ids = {
+                        "wavelength id":"L",
+                        "frame id":"Frame"
+            }
             
 Equivalent IDs
 --------------
@@ -173,8 +175,9 @@ table.  We expand the location and ordering tables to save checking each time. :
                     if self.name_locations.has_key(k):
                         self.name_locations[one_id] = self.name_locations[k]
                 if k in self.ordering_ids:
+                    id_prefix = self.ordering_ids[k]
                     for one_id in i:
-                        self.ordering_ids.append(one_id)
+                        self.ordering_ids[one_id]=id_prefix
             print 'NX: ordered ids now ' + `self.ordering_ids`
             
             # data axis precedence is handled differently as it is encoded
@@ -228,7 +231,7 @@ All known names
 
 We construct a list of all known names to check against. ::
 
-            self.all_known_names = set(self.name_locations.keys()) | set(self.ordering_ids)
+            self.all_known_names = set(self.name_locations.keys()) | set(self.ordering_ids.keys())
             self.all_known_names.update(*[v[0] for v in self.synthetic_values.values()])
 
 Handling units
@@ -410,12 +413,12 @@ Synthesizing IDs
 The position of an item in an array is a simple way to store unique IDs. So to
 generate IDs, we simply generate sequential values. ::
 
-        def make_id(self,value_list):
+        def make_id(self,value_list,prefix=""):
             """Synthesize an ID"""
             try:
-                newids = range(1,len(value_list)+1)
+                newids = [prefix+str(r) for r in range(1,len(value_list)+1)]
             except TypeError:         #assume is single value
-                newids = [1]
+                newids = [prefix+"1"]
             return newids
 
 Converting fixed lists
@@ -659,7 +662,8 @@ performed when the 'is_ordering' flag is set in the 'get_sub_tree' call. ::
                   print 'NX: creating ordering id'
                   length,dummy_array = self.synthesize_values(counting_arrays,(ordering_tree,None))
                   counting_dict = dict(zip(all_keys,zip(counting_arrays,dummy_array)))
-                  valuedict[ordering_key]=counting_dict[all_keys[-1]]
+                  key_prefix = self.ordering_ids[ordering_key]
+                  valuedict[ordering_key]=([key_prefix+str(c) for c in counting_dict[all_keys[-1]][0]],None)
                   print 'NX: set %s to %s' % (ordering_key,valuedict[ordering_key])
               return valuedict
 
@@ -1080,7 +1084,7 @@ that we can order the values in each branch of the tree correctly. ::
             print 'NX: now outputting primary names ' + `primary_names`
             self.output_keyed_values(primary_names,output_names)
             # up next: names that are non-ordering keys, with no primary item
-            dangling_keys = self.all_keys.intersection(output_names).difference(self.ordering_ids)
+            dangling_keys = self.all_keys.intersection(output_names).difference(self.ordering_ids.keys())
             print 'NX: found dangling keys %s' % `dangling_keys`
             while len(dangling_keys)>0:
                 dk = dangling_keys.pop()
@@ -1093,7 +1097,7 @@ that we can order the values in each branch of the tree correctly. ::
                 output_names.difference_update(key_seq)
                 dangling_keys.difference_update(key_seq)
             # straight names require no keys, or ordering keys only
-            straight_names = output_names.difference(self.ordering_ids)
+            straight_names = output_names.difference(self.ordering_ids.keys())
             print 'NX: now outputting straight names ' + `straight_names`
             self.output_unkeyed_values(straight_names,output_names)
             # Finished: check that nothing is left
