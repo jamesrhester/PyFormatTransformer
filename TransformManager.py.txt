@@ -3,27 +3,14 @@ Introduction
 
 This file demonstrates an ontology-driven transformation between file
 formats as discussed in Hester (2016).  In order to operate it one
-needs (i) the nx and CIF format adapters (and dependencies) written in
-Python and provided with this file; (ii) the dREL dictionary also
-provided; (iii) the PyCIFRW package (for dREL transformations).
+needs format adapters (and dependencies) written in
+Python and matching the expected API (see documentation);
+(ii) the dREL dictionary also provided; (iii) the PyCIFRW package (for dREL transformations).
 Transformation is driven by a list of canonical names (dataname
-bundle) provided in an external text file and an input file conforming to
-either the CIF or NeXus standards.  A generic adapter object is initialised
+bundle).  A generic adapter object is initialised
 with this information. ::
 
-    import nx_format_adapter as nx
-    import cif_format_adapter as cf
     from CifFile import CifDic
-    debug_adapter = None  #forward declaration
-
-Data tables
-===========
-
-These tables configure the operation of the transformation. ::
-
-    transform_table = {"nexus":(nx.NXAdapter,(nx.canonical_groupings,)),
-                      "cif":(cf.CifAdapter,(cf.canonical_name_locations,cf.canonical_groupings)),
-                      "plain":(debug_adapter,())}
 
 dREL configuration
 ==================
@@ -498,97 +485,68 @@ has to be set when the packet is created. ::
 Overall control
 ===============
 
-This routine is responsible for overall control of the transformation. ::
+This class is responsible for overall control of the transformation. ::
 
-    def manage_transform(name_file,filetype,infile,outtype,outfile,unit_name=None,
-        drel_dict = 'full_demo_1.0.dic'):
-        """Manage a file type transformation"""
-        singlenames,multinames = get_names(name_file)
-        all_names = singlenames + multinames
-        def_dic = CifDic(drel_dict,grammar="2.0")
-        in_module = apply(transform_table[filetype][0],transform_table[filetype][1])
-        out_module = apply(transform_table[outtype][0],transform_table[outtype][1])
-        in_handle = in_module.open_file(infile)
-        in_unit = in_module.open_data_unit(entryname=unit_name)
-        generic = GenericInput(in_module,def_dic)
-        data_unit_spec = out_module.get_single_names()   #defines data unit
-        # leave in datanames that are potentially multi-valued
-        drel_names = [generic.get_drel_name(n) for n in data_unit_spec]
-        name_cats = [def_dic[n]['_name.category_id'] for n in drel_names]
-        cat_type = [def_dic[n].get('_definition.class','Datum') for n in name_cats]
-        were_multi = [n[0] for n in zip(data_unit_spec,cat_type) if n[1] == 'Loop'] 
-        print 'Following names single valued on output: ' + `were_multi`
-        output_schedule = generic.slice_and_dice(were_multi)
-        print 'Generated data entry output schedule: ' + `output_schedule`
-        def write_out_names(single_valued_names):
-            """Output names, with those that are not listed provided in the argument"""
-            for name in all_names:
-                result = generic.get_by_canonical_name(name)
-                if result is None:
-                    print "Skipping %s, not found or derivable from input file" % name   # can't be done
-                else:#now output this value
-                #    if name in single_valued_names:
-                #        result = result[0]   #remove one level of listing
-                    out_module.set_by_name(name,result,generic.get_type(name))
+    class TransformManager(object):
+        """Manage datafile transformation"""
+        def __init__(self):
+            self.plugin_list = {}
 
-        if len(output_schedule)>0:
-            [all_names.remove(n) for n in were_multi if n in output_schedule.keys() and n in all_names]  #remove unneeded names
-            must_be_single = [n for n in all_names if generic.find_singleton(output_schedule.keys(),n)]
-            print 'Single-valued: ' + `must_be_single`
-            for single_data_unit in range(len(output_schedule[output_schedule.keys()[0]])):
-                print 'Creating data unit for value %s' % output_schedule[output_schedule.keys()[0]]
-                out_unit = out_module.create_data_unit()
-                filter_names = output_schedule.keys()
-                [generic.add_filter(k,output_schedule[k]) for k in filter_names]
-                for unit_key in output_schedule:
-                    out_module.set_by_name(unit_key,generic.get_by_canonical_name(unit_key),generic.get_type(unit_key))
-                    # out_module.set_by_name(unit_key,output_schedule[unit_key][single_data_unit],
-                    #                           generic.get_type(unit_key))
-                write_out_names(must_be_single)
-                out_module.close_data_unit()
-        else:
-            out_module.create_data_unit()
-            write_out_names([])
-            out_module.close_data_unit()
+        def register(self,adapter_class,mnemonic):
+            self.plugin_list[mnemonic] = adapter_class
+            # we could check API conformance here
             
-        out_module.output_file(outfile)
+        def set_dictionary(self,dic):
+            """Set the DDLm dictionary for use with this class"""
+            self.def_dic = CifDic(dic,grammar="2.0")
+            
+        def manage_transform(self,out_bundle,infile,intype,outfile,outtype,unit_name=None):
+            """Manage a file type transformation"""
+            all_names = out_bundle[:]
+            in_module = self.plugin_list[intype]
+            out_module = self.plugin_list[outtype]
+            in_handle = in_module.open_file(infile)
+            in_unit = in_module.open_data_unit(entryname=unit_name)
+            generic = GenericInput(in_module,self.def_dic)
+            data_unit_spec = out_module.get_single_names()   #defines data unit
+            # leave in datanames that are potentially multi-valued
+            drel_names = [generic.get_drel_name(n) for n in data_unit_spec]
+            name_cats = [self.def_dic[n]['_name.category_id'] for n in drel_names]
+            cat_type = [self.def_dic[n].get('_definition.class','Datum') for n in name_cats]
+            were_multi = [n[0] for n in zip(data_unit_spec,cat_type) if n[1] == 'Loop'] 
+            print 'Following names single valued on output: ' + `were_multi`
+            output_schedule = generic.slice_and_dice(were_multi)
+            print 'Generated data entry output schedule: ' + `output_schedule`
+            def write_out_names(single_valued_names):
+                """Output names, with those that are not listed provided in the argument"""
+                for name in all_names:
+                    result = generic.get_by_canonical_name(name)
+                    if result is None:
+                        print "Skipping %s, not found or derivable from input file" % name   # can't be done
+                    else:#now output this value
+                    #    if name in single_valued_names:
+                    #        result = result[0]   #remove one level of listing
+                        out_module.set_by_name(name,result,generic.get_type(name))
+
+            if len(output_schedule)>0:
+                [all_names.remove(n) for n in were_multi if n in output_schedule.keys() and n in all_names]  #remove unneeded names
+                must_be_single = [n for n in all_names if generic.find_singleton(output_schedule.keys(),n)]
+                print 'Single-valued: ' + `must_be_single`
+                for single_data_unit in range(len(output_schedule[output_schedule.keys()[0]])):
+                    print 'Creating data unit for value %s' % output_schedule[output_schedule.keys()[0]]
+                    out_unit = out_module.create_data_unit()
+                    filter_names = output_schedule.keys()
+                    [generic.add_filter(k,output_schedule[k]) for k in filter_names]
+                    for unit_key in output_schedule:
+                        out_module.set_by_name(unit_key,generic.get_by_canonical_name(unit_key),generic.get_type(unit_key))
+                        # out_module.set_by_name(unit_key,output_schedule[unit_key][single_data_unit],
+                        #                           generic.get_type(unit_key))
+                    write_out_names(must_be_single)
+                    out_module.close_data_unit()
+            else:
+                out_module.create_data_unit()
+                write_out_names([])
+                out_module.close_data_unit()
+
+            out_module.output_file(outfile)        
         
-
-The dataname bundle
--------------------
-
-The dataname bundle file is a simple file with format 'canonical name,type' on each line. If
-that name takes multiple values, it is prefixed by an asterisk (*).::
-
-    def get_names(name_file):
-        """Get datanames from the file"""
-        names = [n.strip() for n in open(name_file).readlines()]
-        multinames = [n[1:] for n in names if n[0]=="*"]
-        singlenames = [n for n in names if n[0]!="*"]
-        return singlenames,multinames
-        
-        
-Command-line interface
-======================
-
-Four arguments are expected: the dataname bundle, the input file type (nexus or cif),
-and the input file name. ::
-
-    if __name__=="__main__":
-        import sys
-        if len(sys.argv)<5:
-            print "Usage: drive_transform <dataname bundle> <nexus/cif> <input filename> <nexus/cif> <output filename> (data unit name)"
-            exit
-        name_bundle = sys.argv[0]
-        filetype = sys.argv[1]
-        infile = sys.argv[2]
-        outtype = sys.argv[3]
-        outfile = sys.argv[4]
-        if len(sys.argv)>5:
-            data_unit_name = sys.argv[5]
-        else:
-            data_unit_name = None
-        manage_transform(name_bundle,filetype,infile,outtype,outfile,dataname=data_unit_name)
-
-
- 

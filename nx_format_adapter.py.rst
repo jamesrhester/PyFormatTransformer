@@ -1183,21 +1183,3 @@ name is a special case. ::
                     one_entry.data.nxsignal = one_entry.data.data
             root.save(filename)
       
-Example driver
-==============
-Showing how to use these routines. Not functional at present. ::
-
-    def process(filename,canonical_name):
-        """For demonstration purposes, print out the value of class,name"""
-        nxadapter = NXAdapter([])
-        nxadapter.open_file(filename)
-        nxadapter.open_data_unit()
-        wave_val = nxadapter.get_by_name(canonical_name,'Real')
-        print `wave_val`
-
-    if __name__ == "__main__":
-        import sys
-        if len(sys.argv) > 2:
-            filename = sys.argv[1]
-            canonical_name = sys.argv[2]
-            process(filename,canonical_name)

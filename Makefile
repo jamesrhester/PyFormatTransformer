@@ -1,4 +1,4 @@
-programs: nx_format_adapter.py cif_format_adapter.py drive_transformation.py create_test_file.py
+programs: nx_format_adapter.py cif_format_adapter.py TransformManager.py create_test_file.py
 
 #
 %.py: %.ui

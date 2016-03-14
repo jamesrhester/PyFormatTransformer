@@ -178,7 +178,7 @@ which case we have to process the CBF/imgCIF image data into a standard,
 format agnostic numpy array.  We cache this to avoid reading a multi-megabyte
 file every time. ::
 
-        def get_by_name(self,name,value_type,domain=None):
+        def get_by_name(self,name,value_type,units=None):
             """Return values as [[value_type]] for [[name]]"""
             if name == "2D data":  #special name
                 if self.cifblock.image_cache is None:
@@ -212,7 +212,7 @@ We store the images until the block is finished in order to provide
 the binary id to the image encoding routine, which encodes it in
 the header. ::
 
-        def set_by_name(self,name,value,value_type,domain=None):
+        def set_by_name(self,name,value,value_type,units=None):
             import numpy
             if name == "2D data": 
                 self.output_image_cache = map(numpy.array,value)
@@ -392,30 +392,3 @@ provided. ::
             image_enc = CifFile("cbf_scratch.cif").first_block()['_array_data.data']
             return image_enc
             
-Example processing
-==================
-
-A simple run-through to make sure it is working. ::
-
-    def process(filename,blockname):
-        filehandle = open_file(filename)
-        block = open_data_unit(filehandle,blockname)
-        output_values = [('incident wavelength','Real'),
-                         ('start time','Text')]
-        for o,t in output_values:
-            print get_by_name(block,o,t)
-        # check images work
-        pp = create_images(block)
-        print 'Found %d images' % len(pp)
-        print 'Shapes:'
-        for im in pp:
-           print `im.shape`
-
-    if __name__ == "__main__":
-        import sys
-        if len(sys.argv) < 3:
-            print "Usage: cif_format_adapter.py testfile testblock"
-            exit
-        filename = sys.argv[1]
-        blockname = sys.argv[2]
-        process(filename,blockname)

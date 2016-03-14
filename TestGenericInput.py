@@ -1,7 +1,7 @@
 # Test routines to make sure that our GenericInput class operates properly
 # and can interface with dREL
 
-import drive_transformation as d
+import TransformManager as t
 import nx_format_adapter as n
 import cif_format_adapter as cf
 import CifFile.drel as drel
@@ -237,7 +237,7 @@ class GICifInputTestCase(unittest.TestCase):
         self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
         self.cfa.open_file("testfiles/Cu033V2O5_1_001.cbf")
         self.cfa.open_data_unit()
-        self.gi = d.GenericInput(self.cfa,self.dict)
+        self.gi = t.GenericInput(self.cfa,self.dict)
 
     def testPlainInput(self):
         """Test the getitem method"""
@@ -259,7 +259,7 @@ class GIFunctionalityTestCase(unittest.TestCase):
         self.cfa = cf.CifAdapter(cf.canonical_name_locations,{})
         self.cfa.open_file("testfiles/multi-image-test.cif")
         self.cfa.open_data_unit()
-        self.gi = d.GenericInput(self.cfa,self.dict)
+        self.gi = t.GenericInput(self.cfa,self.dict)
 
     def testSimpleFilter(self):
         """Test that a simple item is filtered properly"""
@@ -279,19 +279,16 @@ class GITransformToNXTestCase(unittest.TestCase):
     """Testing the dREL transforms using CIF-based input"""
     def setUp(self):
         self.nxa = n.NXAdapter(n.canonical_groupings)
+        self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
         self.nx_filename = 'nx_test_case.h5'
-        self.data_bundlename = './test_data_bundle'
+        self.transformer = t.TransformManager()
+        self.transformer.register(self.nxa,"nexus")
+        self.transformer.register(self.cfa,"cif")
+        self.transformer.set_dictionary("full_demo_1.0.dic")
         try:
             os.remove(self.nx_filename)
         except OSError:
             pass
-        
-    def make_bundle(self,name_list):
-        """Make a filename bundle"""
-        f = open(self.data_bundlename,"w")
-        for name in name_list:
-            f.write(name+"\n")
-        f.close()
 
     def check_vals(self,name,value,value_type,tolerance):
         """Check that the given canonical name has the
@@ -311,16 +308,16 @@ class GITransformToNXTestCase(unittest.TestCase):
 
     def testPlainTransform(self):
         """Test translation that doesnt need dREL"""
-        self.make_bundle(["incident wavelength","wavelength id"])
-        d.manage_transform(self.data_bundlename,"cif","testfiles/adsc_jrh_testfile.cif",
-                           "nexus",self.nx_filename)
+        out_bundle =["incident wavelength","wavelength id"]
+        self.transformer.manage_transform(out_bundle,"testfiles/adsc_jrh_testfile.cif","cif",
+                                          self.nx_filename,"nexus")
         self.check_vals("incident wavelength",[0.711955],'Real',0.001)
 
     def testAxisTransform(self):
         """Test that axes are transformed correctly"""
-        self.make_bundle(["simple detector axis id","simple detector axis vector mcstas","simple detector axis offset mcstas"])
-        d.manage_transform(self.data_bundlename,"cif","testfiles/adsc_jrh_testfile.cif",
-                           "nexus","adsc_jrh_testfile.nx")
+        out_bundle = ["simple detector axis id","simple detector axis vector mcstas","simple detector axis offset mcstas"]
+        self.transformer.manage_transform(out_bundle,"testfiles/adsc_jrh_testfile.cif","cif",
+                                          "adsc_jrh_testfile.nx","nexus")
         #self.dumpfile(self.nx_filename)
         # create simple array
         self.nxa.open_file("adsc_jrh_testfile.nx")
@@ -335,21 +332,18 @@ class GITransformToNXTestCase(unittest.TestCase):
 class GITransformFromNXTestCase(unittest.TestCase):
     """Testing the dREL transforms using NeXus-based input, no output images"""
     def setUp(self):
+        self.nxa = n.NXAdapter(n.canonical_groupings)
         self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
+        self.transformer = t.TransformManager()
+        self.transformer.register(self.nxa,"nexus")
+        self.transformer.register(self.cfa,"cif")
+        self.transformer.set_dictionary("full_demo_1.0.dic")
         self.cf_filename = 'cif_test_case.cif'
-        self.data_bundlename = './test_data_bundle'
         try:
             os.remove(self.cf_filename)
         except OSError:
             pass
                   
-    def make_bundle(self,name_list):
-        """Make a filename bundle"""
-        f = open(self.data_bundlename,"w")
-        for name in name_list:
-            f.write(name+"\n")
-        f.close()
-
     def check_vals(self,name,value,value_type,tolerance):
         """Check that the given canonical name has the
         stated value"""
@@ -363,16 +357,16 @@ class GITransformFromNXTestCase(unittest.TestCase):
 
     def testPlainTransform(self):
         """Test translation that doesnt need dREL"""
-        self.make_bundle(["wavelength id","incident wavelength"])
-        d.manage_transform(self.data_bundlename,"nexus","testfiles/nexus-multi-image.nx",
-                           "cif",self.cf_filename)
+        out_bundle =  ["wavelength id","incident wavelength"]
+        self.transformer.manage_transform(out_bundle,"testfiles/nexus-multi-image.nx","nexus",
+                                          self.cf_filename,"cif")
         self.check_vals("incident wavelength",[0.711955],'Real',0.001)
 
     def testAxisTransform(self):
         """Test that axes are transformed correctly"""
-        self.make_bundle(["axis id","axis vector","axis offset"])
-        d.manage_transform(self.data_bundlename,"nexus","testfiles/adsc_jrh_testfile.nx",
-                           "cif","axis_test.cif")
+        out_bundle = ["axis id","axis vector","axis offset"]
+        self.transformer.manage_transform(out_bundle,"testfiles/adsc_jrh_testfile.nx","nexus",
+                           "axis_test.cif","cif")
         # create simple array
         self.cfa.open_file("axis_test.cif")
         self.cfa.open_data_unit()
@@ -390,19 +384,16 @@ class GITransformToNXImageTestCase(unittest.TestCase):
     """Check transforms that involve images """
     def setUp(self):
         self.nxa = n.NXAdapter(n.canonical_groupings)
+        self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
+        self.transformer = t.TransformManager()
+        self.transformer.register(self.nxa,"nexus")
+        self.transformer.register(self.cfa,"cif")
+        self.transformer.set_dictionary("full_demo_1.0.dic")
         self.nx_filename = 'nx_test_case.h5'
-        self.data_bundlename = './test_data_bundle'
         try:
             os.remove(self.nx_filename)
         except OSError:
             pass
-
-    def make_bundle(self,name_list):
-        """Make a filename bundle"""
-        f = open(self.data_bundlename,"w")
-        for name in name_list:
-            f.write(name+"\n")
-        f.close()
 
     def check_vals(self,name,value,value_type,tolerance):
         """Check that the given canonical name has the
@@ -422,12 +413,11 @@ class GITransformToNXImageTestCase(unittest.TestCase):
 
     def testImageTransform(self):
         """Test that an image is stacked and stored"""
-        self.make_bundle(["simple scan frame scan id",
+        out_bundle = ["simple scan frame scan id",
                           "simple scan frame frame id",
-                          "simple scan data"])
-        print 'TIT TIT TIT'
-        d.manage_transform(self.data_bundlename,"cif","testfiles/multi-image-test.cif",
-                           "nexus",self.nx_filename)
+                          "simple scan data"]
+        self.transformer.manage_transform(out_bundle,"testfiles/multi-image-test.cif","cif",
+                                          self.nx_filename,"nexus")
         self.nxa.open_file(self.nx_filename)
         self.nxa.open_data_unit()
         dd = numpy.array(self.nxa.get_by_name("simple scan data","Real"))
@@ -437,12 +427,11 @@ class GITransformToNXImageTestCase(unittest.TestCase):
 
     def testImageAxes(self):
         """Test that the axes are added to an image with precedence"""
-        self.make_bundle(["simple scan frame scan id","simple scan data",
+        out_bundle = ["simple scan frame scan id","simple scan data",
                           "simple scan frame frame id","data axis id",
-                          "data axis precedence"])
-        print 'TIA TIA TIA'
-        d.manage_transform(self.data_bundlename,"cif","testfiles/multi-image-test.cif",
-                           "nexus",self.nx_filename)
+                          "data axis precedence"]
+        self.transformer.manage_transform(out_bundle,"testfiles/multi-image-test.cif","cif",
+                                          self.nx_filename,"nexus")
         nn = n.NXAdapter(n.canonical_groupings)
         nn.open_file(self.nx_filename)
         nn.open_data_unit()
@@ -456,27 +445,24 @@ class GITransformToNXImageTestCase(unittest.TestCase):
 class GITransformFromNXImageTestCase(unittest.TestCase):
     """Check transforms from NX that involve images in NX format"""
     def setUp(self):
+        self.nxa = n.NXAdapter(n.canonical_groupings)
         self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
+        self.transformer = t.TransformManager()
+        self.transformer.register(self.nxa,"nexus")
+        self.transformer.register(self.cfa,"cif")
+        self.transformer.set_dictionary("full_demo_1.0.dic")
         self.cif_filename = 'cif_test_case.cif'
-        self.data_bundlename = './test_data_bundle'
         try:
             os.remove(self.cif_filename)
         except OSError:
             pass
         
-    def make_bundle(self,name_list):
-        """Make a filename bundle"""
-        f = open(self.data_bundlename,"w")
-        for name in name_list:
-            f.write(name+"\n")
-        f.close()
- 
     def testImageTransform(self):
         """Test that an image is unstacked and stored"""
         import numpy
-        self.make_bundle(["2D data","2D data identifier"])
-        d.manage_transform(self.data_bundlename,"nexus","testfiles/nexus-multi-image.nx",
-                           "cif",self.cif_filename)
+        out_bundle = ["2D data","2D data identifier"]
+        self.transformer.manage_transform(out_bundle,"testfiles/nexus-multi-image.nx","nexus",
+                                          self.cif_filename,"cif")
         self.cfa.open_file(self.cif_filename)
         self.cfa.open_data_unit()
         dd = numpy.array(self.cfa.get_by_name("2D data","Integer"))
@@ -485,60 +471,55 @@ class GITransformFromNXImageTestCase(unittest.TestCase):
 class RoundTripTestCase(unittest.TestCase):
     """Test that full round trip preserves information"""
     def setUp(self):
+        self.nxa = n.NXAdapter(n.canonical_groupings)
+        self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
+        self.transformer = t.TransformManager()
+        self.transformer.register(self.nxa,"nexus")
+        self.transformer.register(self.cfa,"cif")
+        self.transformer.set_dictionary("full_demo_1.0.dic")
         self.nexus_file = "round_trip_outbound.nx"
-        self.nexus_bundlename = "outbound_bundle.txt"
-        self.cif_bundlename = "return_bundle.txt"
-        nexus_bundle = ["incident wavelength", "wavelength id", "data axis precedence","data axis id",
+        self.nexus_bundle = ["incident wavelength", "wavelength id", "data axis precedence","data axis id",
                         "simple scan data","simple scan frame frame id","simple detector axis id",
                         "simple detector axis vector mcstas","simple detector axis offset mcstas",
                         "goniometer axis id","goniometer axis vector mcstas",
                         "goniometer axis offset mcstas","frame axis location axis id",
                         "frame axis location angular position","frame axis location frame id",
                         "simple scan frame scan id","frame axis location scan id"]
-        cif_bundle = ["incident wavelength","wavelength id","axis id",
+        self.cif_bundle = ["incident wavelength","wavelength id","axis id",
                       "axis vector","axis offset","frame axis location frame id","2D data",
                       "2D data identifier","2D data structure id","frame axis location axis id",
                       "frame axis location angular position", "frame axis location scan id",
                       "data frame id","data frame binary id","data frame array id",
                       "data frame scan id"]
-        self.make_bundle(self.nexus_bundlename,nexus_bundle)
-        self.make_bundle(self.cif_bundlename,cif_bundle)
-        d.manage_transform(self.nexus_bundlename,"cif","testfiles/multi-image-test.cif",
-                           "nexus",self.nexus_file)
+        self.transformer.manage_transform(self.nexus_bundle,"testfiles/multi-image-test.cif","cif",
+                                          self.nexus_file,"nexus")
         # dump the file for interest
         nxa = n.NXAdapter(n.canonical_groupings)
         nxa.open_file(self.nexus_file)
         print nxa.filehandle.tree
-        d.manage_transform(self.cif_bundlename,"nexus","round_trip_outbound.nx",
-                           "cif","round_trip_return.cif")
-        self.cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
-        self.cfa.open_file("round_trip_return.cif")
-        self.cfa.open_data_unit()
+        self.transformer.manage_transform(self.cif_bundle,self.nexus_file,"nexus",
+                                          "round_trip_return.cif","cif")
+        self.new_cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
+        self.new_cfa.open_file("round_trip_return.cif")
+        self.new_cfa.open_data_unit()
         self.old_cfa = cf.CifAdapter(cf.canonical_name_locations,cf.canonical_groupings)
         self.old_cfa.open_file("testfiles/multi-image-test.cif")
         self.old_cfa.open_data_unit()
         
-    def make_bundle(self,filename,name_list):
-        """Make a filename bundle"""
-        f = open(filename,"w")
-        for name in name_list:
-            f.write(name+"\n")
-        f.close()
-
     def testWavelength(self):
         """Test that we recover the wavelength"""
-        w = self.cfa.get_by_name("incident wavelength","Real")
+        w = self.new_cfa.get_by_name("incident wavelength","Real")
         self.failUnless(abs(w-0.711955)<0.001)
 
     def testPositions(self):
         """Test that images associated with each position are the same"""
-        p = self.cfa.get_by_name("frame axis location angular position","Real")
-        a = self.cfa.get_by_name("frame axis location axis id","Text")
-        f = self.cfa.get_by_name("frame axis location frame id","Text")
-        d = self.cfa.get_by_name("2D data","Integer")
-        di = self.cfa.get_by_name("2D data identifier","Integer")
-        frame_id = self.cfa.get_by_name("data frame id","Text")
-        binary_id = self.cfa.get_by_name("data frame binary id","Integer")
+        p = self.new_cfa.get_by_name("frame axis location angular position","Real")
+        a = self.new_cfa.get_by_name("frame axis location axis id","Text")
+        f = self.new_cfa.get_by_name("frame axis location frame id","Text")
+        d = self.new_cfa.get_by_name("2D data","Integer")
+        di = self.new_cfa.get_by_name("2D data identifier","Integer")
+        frame_id = self.new_cfa.get_by_name("data frame id","Text")
+        binary_id = self.new_cfa.get_by_name("data frame binary id","Integer")
         op = self.old_cfa.get_by_name("frame axis location angular position","Real")
         oa = self.old_cfa.get_by_name("frame axis location axis id","Text")
         of = self.old_cfa.get_by_name("frame axis location frame id","Text")
@@ -562,8 +543,8 @@ class RoundTripTestCase(unittest.TestCase):
             self.failUnless((abs(new_image-old_image)<0.1).all())
     
 if __name__=='__main__':
-    #unittest.main()
-    suite = unittest.TestLoader().loadTestsFromTestCase(NXAdapterWriteReadTestCase)
+    unittest.main()
+    #suite = unittest.TestLoader().loadTestsFromTestCase(NXAdapterWriteReadTestCase)
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(NXAdapterInternalRoutinesTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformFromNXTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(CifAdapterReadTestCase))
@@ -572,5 +553,5 @@ if __name__=='__main__':
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformToNXImageTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GIFunctionalityTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformFromNXImageTestCase))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(RoundTripTestCase))
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(RoundTripTestCase))
+    #unittest.TextTestRunner(verbosity=2).run(suite)
