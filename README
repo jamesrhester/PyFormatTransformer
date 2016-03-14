@@ -1,0 +1,19 @@
+Datafile transformation tool
+============================
+
+This software implements an approach to datafile transformation
+based on using a machine-readable ontology as the intermediary
+between arbitrary datafiles containing items from the ontology.
+
+Installation
+============
+
+See file INSTALLATION in this directory.  You will need Python, and
+a C compiler if you intend to handle images.
+
+Publication
+===========
+
+This approach will be published in The Data Journal (manuscript
+in preparation).
+

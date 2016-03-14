@@ -1,0 +1,86 @@
+Installation of Datafile Transformation Utility
+===============================================
+
+Overview
+========
+
+This software is written in pure Python.  However, some of
+its dependencies contain compiled libraries.  The packages
+required are PyCIFRW (CIF format support), numpy (calculations),
+nexus.py (NeXus support), h5py (HDF5 support), pycbf
+(packing/unpacking of CIF images).  Once all of these are
+installed, you should be able to run the tests provided
+in this directory by typing "python TestGenericInput.py".
+
+Linux
+=====
+
+Your distribution will already have Python present. The following
+instructions assume use of the Python packaging utility, "pip",
+although you should in general use the distribution package manager
+for the major packages numpy and h5py. If using pip, which will often
+recompile from source code, you will need to separately install the HDF5
+libraries (development version) using your distribution package
+manager.
+
+Step 1: Install standard packages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+::
+
+    apt-get install libhdf5-dev   # Debian HDF5 libraries
+    pip install numpy     # or use your distribution's package
+    pip install Cython    # only needed when using pip for h5py
+    pip install h5py      # or use your distribution's package
+    pip install nexusformat #
+
+    
+Step 2: PyCBF
+~~~~~~~~~~~~~
+
+PyCBF is used in the current package solely in order to
+decompress/compress images in CIF files.  All other aspects of the
+present package can be used without requiring PyCBF.  PyCBF
+version 0.9.5.12 has been tested; earlier versions (e.g. 0.9.2
+presently bundled with Debian) will fail due to being unable to
+handle long integer values in images.
+
+Obtain CBFlib from [http://www.bernstein-plus-sons.com/software/CBF/]
+and follow the instructions for creating CBFlib.  Note that CBFlib
+will also install HDF5 libraries which may not match the version used
+for h5py, in which case you will need to uninstall h5py from the
+distribution and install h5py using pip, which will (hopefully)
+recompile using the version of h5py installed by CBFlib.
+
+After this, change into the CBFlib pycbf directory and execute:
+
+::
+    
+    python setup.py install
+
+This will install pycbf into your python distribution.
+
+
+Windows/Mac
+===========
+
+Unfortunately I do not have access to an appropriate Windows
+or Mac systems, so the following instructions are untested.
+You will need a C/C++ compiler on your system for pycbf:
+
+1. Install Enthought Canopy (free version) from
+   https://www.enthought.com/products/canopy/
+   This includes h5py and numpy.
+
+2. Install pycifrw (``easy_install pycifrw`` might work)
+3. Install nexusformat (``easy_install nexusformat`` might work)
+4. Download,compile and install CBFlib: 
+   http://www.bernstein-plus-sons.com/software/CBF/
+5. In the CBFlib "pycbf" directory, run ``python setup.py install``
+
+Testing your installation
+=========================
+
+In the main distribution directory, execute the test routines:
+
+::
+    python TestGenericInput.py
