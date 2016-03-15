@@ -543,8 +543,8 @@ class RoundTripTestCase(unittest.TestCase):
             self.failUnless((abs(new_image-old_image)<0.1).all())
     
 if __name__=='__main__':
-    unittest.main()
-    #suite = unittest.TestLoader().loadTestsFromTestCase(NXAdapterWriteReadTestCase)
+    #unittest.main()
+    suite = unittest.TestLoader().loadTestsFromTestCase(NXAdapterWriteReadTestCase)
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(NXAdapterInternalRoutinesTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformFromNXTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(CifAdapterReadTestCase))
@@ -553,5 +553,5 @@ if __name__=='__main__':
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformToNXImageTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GIFunctionalityTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformFromNXImageTestCase))
-    #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(RoundTripTestCase))
-    #unittest.TextTestRunner(verbosity=2).run(suite)
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(RoundTripTestCase))
+    unittest.TextTestRunner(verbosity=2).run(suite)

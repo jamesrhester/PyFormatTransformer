@@ -13,6 +13,8 @@ file format. This procedure requires
 
 The software is bundled with demonstration format adapters for imgCIF
 and the NeXus NXmx application definition, together with a DDLm dictionary.
+Programmers are advised to consult the test routines in ``TestGenericInput.py``
+for examples of use.
 
 Step 1: Create the transform manager
 ------------------------------------
@@ -53,12 +55,15 @@ canonical name is not found in the input file.
 Step 4: Run the transformation
 ------------------------------
 
-Provide input and output filenames, specifying in each case the
-relevant format and set of input and output canonical dataname bundles.
+Provide a list of canonical names for the output file, together with
+input and output filenames, specifying in each case the relevant
+format.  The transformation manager will attempt to find or calculate
+the items in the output bundle based on information in the dictionary.
 
 ::
-    
-    transformer.manage_transformation("input.nx","nxmx","output.cif","cif")
+
+    output_bundle = ["a different dataname","some other dataname","a dataname"]
+    transformer.manage_transform(output_bundle,"input.nx","nxmx","output.cif","cif")
 
 
 Notes
