@@ -1,0 +1,5 @@
+include FormatTransformer/full_demo_1.0.dic
+include FormatTransformer/testfiles/adsc_jrh_testfile.cif
+include FormatTransformer/testfiles/nexus-multi-image.nx
+include FormatTransformer/testfiles/multi-image-test.cif
+include FormatTransformer/testfiles/Cu033V2O5_1_001.cbf

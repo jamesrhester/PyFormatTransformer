@@ -1,0 +1,41 @@
+List of changes to imgCIF DDLm file
+===================================
+
+The following changes/additions were made in order to
+implement translation to/from NeXus files. The original file was obtained
+from Syd Hall (private communication).
+
+* Removal of all 'variant' items (unused in demo)
+* Removal of diffrn_refln category (unused in demo)
+* diffrn_detector key is diffrn_detector.id only (simplify)
+* diffrn_detector.number_of_elements_local added, with dREL method (allow filtering on
+  number of elements)
+* diffrn_radiation removed (unused in demo)
+* array_structure_list_section removed (unused in demo)
+* array_data.as_integers_local added (generic integer-valued image)
+* category diffrn_scan_simple_axis_local added, together with selection of datanames
+  (uncoupled array axis type)
+* category simple_data_axis_local added, together with datanames
+  (axes of 3D dataset, encoded by NeXus in axes attribute)
+* categories goniometer_axis_local, detector_axis_local added (NeXus distinguishes
+  detector and goniometer axes)
+* vector_convention2 and offset_convention2 added to all axis categories (NeXus uses
+  a different axis convention)
+* coupling_number_local added to array_structure_list (allow filtering on array axis
+  coupling)
+* category diffrn_scan_simple_local added (scan of a single axis)
+* category full_frame_local added (scans consisting of identically-structured frames
+  obtained by scanning a single axis)
+* category diffrn_detector_monolithic_local added (describes a single-element detector)
+* category diffrn_scan_frame_monitor removed (unused in demo)
+* category diffrn_detector_monolithic_element_local added (describes an element belonging
+  to a single-element detector)
+* category array_element_size removed (unused)
+* diffrn_scan.number_of_scanned_axes_local/number_of_detectors_local added (to allow
+  filtering on single scan axis/single detector scans)
+* category detector_axis_uncoupled_local added (contains uncoupled axes)
+* category diffrn_scan_simple_frames_local added (frame information for identically
+  constructed frames from a single uncoupled scan axis)
+* category array_intensities removed (unused in demonstration)
+
+

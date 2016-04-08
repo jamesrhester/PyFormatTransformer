@@ -1,11 +1,9 @@
-PROGRAMS = nx_format_adapter.py cif_format_adapter.py TransformManager.py create_test_file.py TestGenericInput.py
-documentation = INSTALLATION README How-To-Use.rst adding-new-datanames.rst adding-new-formats.rst LICENSE imgCIF_changes.txt
-testfiles = testfiles/adsc_jrh_testfile.cif testfiles/nexus-multi-image.nx testfiles/multi-image-test.cif testfiles/nexus-multi-image.nx testfiles/adsc_jrh_testfile.nx testfiles/Cu033V2O5_1_001.cbf
+MODULES = FormatTransformer/FormatAdapters/nx_format_adapter.py FormatTransformer/FormatAdapters/cif_format_adapter.py FormatTransformer/TransformManager.py FormatTransformer/create_test_file.py
+documentation = INSTALLATION README documentation/How-To-Use.rst documentation/adding-new-datanames.rst documentation/adding-new-formats.rst LICENSE documentation/imgCIF_changes.txt
+testfiles = FormatTransformer/testfiles/adsc_jrh_testfile.cif FormatTransformer/testfiles/nexus-multi-image.nx FormatTransformer/testfiles/multi-image-test.cif  FormatTransformer/testfiles/Cu033V2O5_1_001.cbf
+Others = TestGenericInput.py
 
-programs: $(PROGRAMS)
-#
-%.py: %.ui
-	pyside-uic -x -o $@ $< 
+modules: $(MODULES)
 #
 %.py: %.py.rst
 	./pylit.py -t $< 
@@ -16,6 +14,6 @@ programs: $(PROGRAMS)
 clean:
 	rm *.pyc
 
-package: $(PROGRAMS) $(documentation) $(testfiles) full_demo_1.0.dic
-	tar czvf FormatTransformer.tar.gz $^
+package: $(MODULES) $(documentation) $(testfiles) full_demo_1.0.dic
+	tar czvf PyFormatTransformer.tar.gz $^
 #
