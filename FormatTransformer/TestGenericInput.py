@@ -1,9 +1,9 @@
 # Test routines to make sure that our GenericInput class operates properly
 # and can interface with dREL
 
-import TransformManager as t
-import nx_format_adapter as n
-import cif_format_adapter as cf
+from FormatTransformer import TransformManager as t
+from FormatTransformer.FormatAdapters import nx_format_adapter as n
+from FormatTransformer.FormatAdapters import cif_format_adapter as cf
 import CifFile.drel as drel
 from CifFile import CifDic
 import unittest,os
@@ -541,10 +541,10 @@ class RoundTripTestCase(unittest.TestCase):
             old_image = [x[0] for x in zip(od,odi) if x[1]==old_binary][0]
             new_image = [x[0] for x in zip(d,di) if x[1]==new_binary][0]
             self.failUnless((abs(new_image-old_image)<0.1).all())
-    
-if __name__=='__main__':
-    #unittest.main()
-    suite = unittest.TestLoader().loadTestsFromTestCase(NXAdapterWriteReadTestCase)
+
+def runtests():
+    unittest.main()
+    #suite = unittest.TestLoader().loadTestsFromTestCase(NXAdapterWriteReadTestCase)
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(NXAdapterInternalRoutinesTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformFromNXTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(CifAdapterReadTestCase))
@@ -553,5 +553,8 @@ if __name__=='__main__':
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformToNXImageTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GIFunctionalityTestCase))
     #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(GITransformFromNXImageTestCase))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(RoundTripTestCase))
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    #suite.addTest(unittest.TestLoader().loadTestsFromTestCase(RoundTripTestCase))
+    #unittest.TextTestRunner(verbosity=2).run(suite)
+
+if __name__=='__main__':
+    runtests()
